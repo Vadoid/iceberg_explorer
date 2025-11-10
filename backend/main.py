@@ -47,13 +47,20 @@ app.add_middleware(
 
 
 def get_storage_client(project_id: Optional[str] = None):
-    """Get GCS storage client with credentials"""
+    """Get GCS storage client with credentials
+    
+    Credentials are resolved in this order:
+    1. GOOGLE_APPLICATION_CREDENTIALS environment variable (service account JSON)
+    2. Application Default Credentials (from gcloud auth application-default login)
+    3. Default credentials (if available)
+    """
     # Try to use credentials from environment or default
     credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     if credentials_path and os.path.exists(credentials_path):
         if project_id:
             return storage.Client.from_service_account_json(credentials_path, project=project_id)
         return storage.Client.from_service_account_json(credentials_path)
+    # Use Application Default Credentials (from gcloud auth application-default login)
     if project_id:
         return storage.Client(project=project_id)
     return storage.Client()
@@ -253,7 +260,14 @@ async def list_buckets(project_id: Optional[str] = None):
         
         return {"buckets": buckets}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list buckets: {str(e)}")
+        error_msg = str(e)
+        # Provide helpful error message for authentication issues
+        if "credentials" in error_msg.lower() or "authentication" in error_msg.lower() or "permission" in error_msg.lower():
+            error_msg += "\n\nAuthentication Error: Make sure you've run:\n"
+            error_msg += "  gcloud auth application-default login\n"
+            error_msg += "  gcloud auth application-default set-quota-project YOUR_PROJECT_ID\n"
+            error_msg += "\nOr set GOOGLE_APPLICATION_CREDENTIALS to a service account JSON file."
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @app.get("/discover")

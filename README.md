@@ -42,14 +42,21 @@ You have two options for authentication:
 #### Option A: Using gcloud CLI (Recommended)
 
 ```bash
-# Login to Google Cloud
+# Step 1: Login to Google Cloud (for gcloud CLI)
 gcloud auth login
 
-# Set your default project (optional)
+# Step 2: Set up Application Default Credentials (REQUIRED for Python apps)
+# This is different from gcloud auth login and is needed for the application
+gcloud auth application-default login
+
+# Step 3: Set your default project (optional but recommended)
 gcloud config set project YOUR_PROJECT_ID
 
-# Application Default Credentials (ADC) will be used automatically
+# Step 4: Set quota project for ADC (prevents billing/quota warnings)
+gcloud auth application-default set-quota-project YOUR_PROJECT_ID
 ```
+
+**Important**: `gcloud auth login` only sets credentials for the `gcloud` CLI. For Python applications, you **must** also run `gcloud auth application-default login` to set up Application Default Credentials.
 
 #### Option B: Using Service Account JSON Key
 
@@ -59,7 +66,7 @@ gcloud config set project YOUR_PROJECT_ID
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/service-account-key.json"
 ```
 
-**Note**: If you use `gcloud auth login`, you don't need to set `GOOGLE_APPLICATION_CREDENTIALS`. The application will use Application Default Credentials automatically.
+**Note**: If you use `gcloud auth application-default login`, you don't need to set `GOOGLE_APPLICATION_CREDENTIALS`. The application will use Application Default Credentials automatically.
 
 ### 3. Set Up Python Virtual Environment
 
@@ -288,11 +295,27 @@ iceberg_explorer/
 
 **Problem**: "Permission denied" or "Authentication failed"
 
+**Common Cause**: Running `gcloud auth login` alone is not enough! This only sets credentials for the `gcloud` CLI, not for Python applications.
+
 **Solutions**:
-1. Make sure you're authenticated: `gcloud auth login`
-2. Check your project permissions
-3. Verify `GOOGLE_APPLICATION_CREDENTIALS` is set correctly (if using service account)
-4. Try: `gcloud auth application-default login`
+1. **Run Application Default Credentials setup** (REQUIRED):
+   ```bash
+   gcloud auth application-default login
+   gcloud auth application-default set-quota-project YOUR_PROJECT_ID
+   ```
+2. Verify credentials are set:
+   ```bash
+   # Check if ADC file exists
+   ls ~/.config/gcloud/application_default_credentials.json
+   ```
+3. If using service account, verify `GOOGLE_APPLICATION_CREDENTIALS` is set:
+   ```bash
+   echo $GOOGLE_APPLICATION_CREDENTIALS
+   ```
+4. Check your project permissions - you need:
+   - `storage.buckets.list` (to list buckets)
+   - `storage.objects.get` (to read files)
+   - `resourcemanager.projects.list` (to list projects)
 
 ### Backend Won't Start
 
