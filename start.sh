@@ -13,6 +13,15 @@ if [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
     echo ""
 fi
 
+# Check if port 8000 is already in use
+if lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null 2>&1 ; then
+    echo "⚠️  Port 8000 is already in use!"
+    echo "   Killing existing process on port 8000..."
+    lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+    sleep 1
+    echo "   Port 8000 is now free."
+fi
+
 # Start backend in background
 echo "Starting backend server on port 8000..."
 cd backend

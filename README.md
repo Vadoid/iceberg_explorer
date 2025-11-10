@@ -319,6 +319,31 @@ iceberg_explorer/
 
 ### Backend Won't Start
 
+**Problem**: "Address already in use" or port 8000 is occupied
+
+**Solutions**:
+1. **Use the start script** - It automatically handles port conflicts:
+   ```bash
+   ./start.sh
+   ```
+   The script will kill any existing process on port 8000.
+
+2. **Manually kill the process**:
+   ```bash
+   # Find what's using port 8000
+   lsof -i :8000
+   # Kill it (replace PID with the actual process ID)
+   kill -9 <PID>
+   ```
+
+3. **Use a different port** (if you want to keep the existing process):
+   ```bash
+   # Start backend on port 8001
+   cd backend
+   uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+   ```
+   Then update `next.config.js` to proxy to port 8001 instead of 8000.
+
 **Problem**: Import errors or missing dependencies
 
 **Solutions**:
