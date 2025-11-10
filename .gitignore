@@ -6,6 +6,7 @@ __pycache__/
 *.so
 .Python
 taxis
+CODE_AUDIT.md
 
 # Environment
 .env

@@ -1152,16 +1152,12 @@ def get_manifest_files(bucket: str, path: str, manifest_list_path: str, project_
                 from io import BytesIO
                 
                 manifest_bytes = manifest_list_blob.download_as_bytes()
-                print(f"DEBUG: Using fastavro, manifest list size: {len(manifest_bytes)} bytes")
                 
                 # fastavro.reader can read Avro files with embedded schema
                 # Need to seek to beginning
                 manifest_bytes_io = BytesIO(manifest_bytes)
                 manifest_bytes_io.seek(0)
                 manifest_list_data = list(fastavro.reader(manifest_bytes_io))
-                print(f"DEBUG: fastavro parsed {len(manifest_list_data)} records from manifest list")
-                if manifest_list_data:
-                    print(f"DEBUG: First record keys: {list(manifest_list_data[0].keys()) if isinstance(manifest_list_data[0], dict) else 'not a dict'}")
             except Exception as e:
                 print(f"fastavro parsing failed: {str(e)}")
                 import traceback
@@ -1170,7 +1166,6 @@ def get_manifest_files(bucket: str, path: str, manifest_list_path: str, project_
                 try:
                     manifest_list_content = manifest_list_blob.download_as_text()
                     manifest_list_data = json.loads(manifest_list_content)
-                    print(f"DEBUG: JSON fallback parsed manifest list")
                 except Exception as json_err:
                     print(f"JSON fallback also failed: {json_err}")
                     return []
@@ -1180,7 +1175,6 @@ def get_manifest_files(bucket: str, path: str, manifest_list_path: str, project_
             return []
         
         if manifest_list_data is None or (isinstance(manifest_list_data, list) and len(manifest_list_data) == 0):
-            print(f"DEBUG: No manifest list data extracted")
             return []
         
         data_files = []
@@ -1198,8 +1192,6 @@ def get_manifest_files(bucket: str, path: str, manifest_list_path: str, project_
             else:
                 manifests = [manifest_list_data]
         
-        print(f"DEBUG: Found {len(manifests)} manifest entries in manifest list")
-        
         for idx, manifest_entry in enumerate(manifests):
             # Handle different manifest entry formats
             manifest_path = None
@@ -1216,11 +1208,9 @@ def get_manifest_files(bucket: str, path: str, manifest_list_path: str, project_
                 )
             
             if not manifest_path:
-                print(f"DEBUG: Manifest entry {idx} has no path: {manifest_entry}")
                 continue
                 
             manifest_path_clean = manifest_path.replace(f"gs://{bucket}/", "").lstrip("/")
-            print(f"DEBUG: Processing manifest {idx+1}/{len(manifests)}: {manifest_path_clean}")
             
             try:
                 # Download and parse manifest file (also Avro)
@@ -1235,7 +1225,6 @@ def get_manifest_files(bucket: str, path: str, manifest_list_path: str, project_
                         manifest_bytes_io = BytesIO(manifest_bytes)
                         manifest_bytes_io.seek(0)
                         manifest_data = list(fastavro.reader(manifest_bytes_io))
-                        print(f"DEBUG: fastavro parsed {len(manifest_data)} entries from manifest")
                     except Exception as e:
                         print(f"fastavro manifest parsing failed: {str(e)}")
                         import traceback
@@ -1270,8 +1259,6 @@ def get_manifest_files(bucket: str, path: str, manifest_list_path: str, project_
                         if not entries:
                             entries = [manifest_data]
                 
-                print(f"DEBUG: Found {len(entries)} entries in manifest {manifest_path_clean}")
-                
                 for entry_idx, entry in enumerate(entries):
                     # Handle different entry formats
                     if not isinstance(entry, dict):
@@ -1298,11 +1285,6 @@ def get_manifest_files(bucket: str, path: str, manifest_list_path: str, project_
                     )
                     
                     if not file_path:
-                        # Debug: print first entry structure to understand format
-                        if entry_idx == 0:
-                            print(f"DEBUG: First entry keys: {list(entry.keys())}")
-                            if "data_file" in entry:
-                                print(f"DEBUG: data_file keys: {list(entry['data_file'].keys()) if isinstance(entry['data_file'], dict) else 'not a dict'}")
                         continue
                     
                     # Extract partition - could be in various formats
@@ -1358,7 +1340,6 @@ def get_manifest_files(bucket: str, path: str, manifest_list_path: str, project_
                         "nullValueCounts": data_file.get("null_value_counts") or data_file.get("nullValueCounts") or {},
                     })
                 
-                print(f"DEBUG: Extracted {len([f for f in data_files if f['filePath']])} data files from manifest {manifest_path_clean}")
             except Exception as e:
                 # Skip manifests that can't be read
                 print(f"Warning: Could not read manifest {manifest_path_clean}: {str(e)}")
@@ -1366,7 +1347,6 @@ def get_manifest_files(bucket: str, path: str, manifest_list_path: str, project_
                 print(traceback.format_exc())
                 continue
         
-        print(f"DEBUG: Total data files extracted from all manifests: {len(data_files)}")
         return data_files
     except Exception:
         # Return empty list if we can't read manifests
@@ -1434,29 +1414,6 @@ async def analyze_table(bucket: str, path: str, project_id: Optional[str] = None
                        f"2. The table has a metadata/ directory\n"
                        f"3. There are .metadata.json files in the metadata directory"
             )
-        
-        # Debug: Print metadata structure
-        print(f"DEBUG: Metadata keys: {list(metadata.keys())}")
-        print(f"DEBUG: Has 'schema': {'schema' in metadata}")
-        print(f"DEBUG: Has 'snapshots': {'snapshots' in metadata}")
-        print(f"DEBUG: Has 'current-snapshot-id': {'current-snapshot-id' in metadata}")
-        if "current-snapshot-id" in metadata:
-            print(f"DEBUG: current-snapshot-id value: {metadata.get('current-snapshot-id')}")
-        if "snapshots" in metadata:
-            print(f"DEBUG: snapshots type: {type(metadata['snapshots'])}, length: {len(metadata['snapshots']) if isinstance(metadata['snapshots'], list) else 'N/A'}")
-        if "schema" in metadata:
-            schema_obj = metadata["schema"]
-            print(f"DEBUG: Schema type: {type(schema_obj)}")
-            if isinstance(schema_obj, dict):
-                print(f"DEBUG: Schema keys: {list(schema_obj.keys())}")
-                print(f"DEBUG: Schema sample: {str(schema_obj)[:500]}")
-            elif isinstance(schema_obj, list):
-                print(f"DEBUG: Schema is a list with {len(schema_obj)} items")
-                if schema_obj:
-                    print(f"DEBUG: First schema item: {schema_obj[0]}")
-        # Print a sample of the full metadata structure
-        import json
-        print(f"DEBUG: Full metadata sample (first 1000 chars): {json.dumps(metadata, indent=2)[:1000]}")
         
         # Extract schema - Iceberg v2 uses "schemas" (plural) array
         schema_fields = []
