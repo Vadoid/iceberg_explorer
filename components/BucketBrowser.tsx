@@ -35,6 +35,7 @@ export default function BucketBrowser({
   const [showDiscovered, setShowDiscovered] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingBuckets, setLoadingBuckets] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -83,10 +84,14 @@ export default function BucketBrowser({
 
   const loadBuckets = async () => {
     const projectToUse = useManualProject ? manualProjectId : selectedProject;
-    if (!projectToUse) return;
+    if (!projectToUse) {
+      setBuckets([]);
+      setLoadingBuckets(false);
+      return;
+    }
     
     try {
-      setLoading(true);
+      setLoadingBuckets(true);
       setError(null);
       const response = await axios.get('/api/backend/buckets', {
         params: { project_id: projectToUse },
@@ -99,7 +104,7 @@ export default function BucketBrowser({
       setError('Failed to load buckets. Make sure GCS credentials are configured.');
       console.error('Error loading buckets:', err);
     } finally {
-      setLoading(false);
+      setLoadingBuckets(false);
     }
   };
 
@@ -256,9 +261,10 @@ export default function BucketBrowser({
           <h3 className="text-lg font-medium mb-3 text-gray-700 dark:text-gray-300">
             Select a GCS Bucket
           </h3>
-          {loading ? (
+          {loadingBuckets ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="animate-spin h-6 w-6 text-blue-500" />
+              <span className="ml-2 text-gray-600 dark:text-gray-400">Searching for buckets...</span>
             </div>
           ) : error ? (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-400">

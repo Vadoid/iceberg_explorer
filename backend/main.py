@@ -88,11 +88,20 @@ async def list_projects():
     try:
         client = get_resource_manager_client()
         if client is not None:
-            # List all projects - iterate through all pages
-            request = resourcemanager_v3.ListProjectsRequest()
-            
-            # Get all pages of results
-            page_result = client.list_projects(request=request)
+            # Use search_projects instead of list_projects to avoid parent requirement
+            # search_projects can list all accessible projects without requiring a parent
+            try:
+                # Try search_projects first (doesn't require parent)
+                request = resourcemanager_v3.SearchProjectsRequest(query="")
+                page_result = client.search_projects(request=request)
+            except Exception as search_error:
+                # If search_projects fails, try list_projects with organizations/-
+                try:
+                    request = resourcemanager_v3.ListProjectsRequest(parent="organizations/-")
+                    page_result = client.list_projects(request=request)
+                except Exception:
+                    # If both fail, raise the original search error
+                    raise search_error
             
             for project in page_result:
                 try:
