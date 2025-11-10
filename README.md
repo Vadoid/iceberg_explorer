@@ -1,0 +1,411 @@
+# Iceberg Explorer
+
+![Iceberg Explorer](explorer.png)
+
+A comprehensive, user-friendly web interface for exploring and analyzing Apache Iceberg tables stored in Google Cloud Storage (GCS). Browse buckets, analyze table metadata, view sample data, and compare snapshots with an intuitive diff interface.
+
+## Features
+
+- 🔍 **GCS Bucket Browser**: Navigate through GCS buckets and folders with project selection
+- 📊 **Table Analysis**: Comprehensive analysis of Iceberg table metadata, schema, and partitions
+- 📈 **Visualizations**: Interactive charts for partitions, file sizes, and statistics
+- 📋 **Sample Data**: View sample rows from your Iceberg tables
+- 🔄 **Snapshot Comparison**: Compare snapshots to see what changed (like GitHub diff)
+- 🎯 **Table Discovery**: Automatically discover all Iceberg tables in a bucket
+- 📦 **Partition Analysis**: Detailed partition statistics and visualizations
+- 🎨 **Responsive UI**: Modern, user-friendly interface that works on all devices
+- 🔐 **GCS Integration**: Seamless connection to Google Cloud Storage
+
+## Prerequisites
+
+- **Node.js** 18+ and npm
+- **Python** 3.9+ (Python 3.11+ recommended)
+- **Google Cloud SDK** (gcloud CLI) - for authentication
+- **Access to GCS buckets** containing Iceberg tables
+- **Google Cloud Project** with appropriate permissions:
+  - Storage Object Viewer/Admin
+  - Resource Manager Viewer (for project listing)
+
+## Setup
+
+### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd iceberg_explorer
+```
+
+### 2. Authenticate with Google Cloud
+
+You have two options for authentication:
+
+#### Option A: Using gcloud CLI (Recommended)
+
+```bash
+# Login to Google Cloud
+gcloud auth login
+
+# Set your default project (optional)
+gcloud config set project YOUR_PROJECT_ID
+
+# Application Default Credentials (ADC) will be used automatically
+```
+
+#### Option B: Using Service Account JSON Key
+
+```bash
+# Download your service account JSON key from Google Cloud Console
+# Then set the environment variable:
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/service-account-key.json"
+```
+
+**Note**: If you use `gcloud auth login`, you don't need to set `GOOGLE_APPLICATION_CREDENTIALS`. The application will use Application Default Credentials automatically.
+
+### 3. Set Up Python Virtual Environment
+
+```bash
+# Create a virtual environment
+python3 -m venv .venv
+
+# Activate the virtual environment
+# On macOS/Linux:
+source .venv/bin/activate
+
+# On Windows:
+# .venv\Scripts\activate
+```
+
+### 4. Install Backend Dependencies
+
+```bash
+# Make sure virtual environment is activated
+# Upgrade pip first
+pip install --upgrade pip
+
+# Install all Python dependencies
+pip install -r backend/requirements.txt
+```
+
+**Backend Dependencies:**
+- FastAPI - Web framework
+- PyIceberg - Iceberg table parsing
+- Google Cloud Storage SDK - GCS access
+- fastavro - Avro file parsing
+- pyarrow & pandas - Parquet file reading
+- And more (see `backend/requirements.txt`)
+
+### 5. Install Frontend Dependencies
+
+```bash
+# Install Node.js dependencies
+npm install
+```
+
+**Frontend Dependencies:**
+- Next.js 14 - React framework
+- TypeScript - Type safety
+- Tailwind CSS - Styling
+- Recharts - Data visualization
+- Axios - HTTP client
+- Lucide React - Icons
+
+### 6. Start the Application
+
+#### Option A: Using the Start Script (Recommended)
+
+```bash
+# Make sure you're in the project root
+# The script will use the virtual environment automatically
+chmod +x start.sh
+./start.sh
+```
+
+This will start both the backend (port 8000) and frontend (port 3000) servers.
+
+#### Option B: Manual Start
+
+**Terminal 1 - Backend:**
+```bash
+# Activate virtual environment
+source .venv/bin/activate
+
+# Start backend server
+cd backend
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Terminal 2 - Frontend:**
+```bash
+# Start frontend server
+npm run dev
+```
+
+### 7. Access the Application
+
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs (Swagger UI)
+
+## Usage Guide
+
+### 1. Select a GCP Project
+
+- On the main page, you'll see a project selector
+- Choose a project from the dropdown, or enter a project ID manually
+- Buckets will automatically refresh based on the selected project
+
+### 2. Browse GCS Buckets
+
+- Select a bucket from the list
+- Navigate through folders by clicking on them
+- Iceberg tables are automatically detected and marked with a special icon
+
+### 3. Discover Iceberg Tables
+
+- Click the **"Discover Iceberg Tables"** button to scan the entire bucket
+- The system will find all `*.metadata.json` files and list discovered tables
+- Click on any discovered table to analyze it
+
+### 4. Analyze a Table
+
+Click on an Iceberg table to view detailed analysis with multiple tabs:
+
+#### Overview Tab
+- Table metadata (format version, location, UUID)
+- Current snapshot information
+- Table properties
+
+#### Schema Tab
+- Complete schema with field types, IDs, and documentation
+- Field hierarchy and relationships
+
+#### Partitions Tab
+- Partition specification details
+- Partition statistics with visualizations
+- File distribution across partitions
+
+#### Statistics Tab
+- Overall table statistics (total files, records, size)
+- Per-snapshot statistics with delta information
+- Visual charts and graphs
+
+#### Sample Data Tab
+- View sample rows from the table
+- Select a specific snapshot to view data from that point in time
+- Configurable row limit (default: 100 rows)
+
+#### Snapshots Tab
+- Compare any two snapshots side-by-side
+- See added, removed, and modified files
+- View statistics delta (like GitHub diff)
+- Color-coded changes (green=added, red=removed, yellow=modified)
+
+### 5. Compare Snapshots
+
+1. Navigate to the **Snapshots** tab
+2. Select two snapshots from the dropdowns
+3. View the comparison showing:
+   - Summary cards with change counts
+   - Statistics comparison with deltas
+   - Lists of added, removed, and modified files
+   - Detailed file-level changes
+
+## API Endpoints
+
+The backend provides the following REST API endpoints:
+
+### Project & Bucket Management
+
+- `GET /projects` - List all accessible GCP projects
+- `GET /buckets?project_id={id}` - List buckets in a project
+- `GET /browse?bucket={name}&path={path}&project_id={id}` - Browse bucket contents
+
+### Table Analysis
+
+- `GET /analyze?bucket={name}&path={path}&project_id={id}` - Analyze Iceberg table metadata
+- `GET /analyze/snapshot?bucket={name}&path={path}&snapshot_id={id}&project_id={id}` - Get specific snapshot data
+- `GET /sample?bucket={name}&path={path}&limit={n}&snapshot_id={id}&project_id={id}` - Get sample data
+- `GET /snapshot/compare?bucket={name}&path={path}&snapshot_id_1={id1}&snapshot_id_2={id2}&project_id={id}` - Compare two snapshots
+
+### Table Discovery
+
+- `GET /discover?bucket={name}&project_id={id}` - Discover all Iceberg tables in a bucket
+
+## Project Structure
+
+```
+iceberg_explorer/
+├── app/                          # Next.js app directory
+│   ├── page.tsx                  # Main page component
+│   ├── layout.tsx                # Root layout
+│   ├── globals.css               # Global styles
+│   └── api/                      # API proxy routes
+│       └── backend/[...path]/    # Backend API proxy
+├── components/                    # React components
+│   ├── BucketBrowser.tsx         # GCS bucket navigation
+│   ├── TableAnalyzer.tsx         # Main table analysis component
+│   ├── MetadataView.tsx          # Table metadata display
+│   ├── SchemaView.tsx            # Schema information
+│   ├── PartitionView.tsx         # Partition analysis with charts
+│   ├── StatsView.tsx             # Statistics and visualizations
+│   ├── SampleDataView.tsx        # Sample data viewer
+│   └── SnapshotComparisonView.tsx # Snapshot comparison UI
+├── types/                         # TypeScript type definitions
+│   └── index.ts                  # All type definitions
+├── backend/                       # Python FastAPI backend
+│   ├── main.py                   # API server and business logic
+│   └── requirements.txt          # Python dependencies
+├── .venv/                         # Python virtual environment (gitignored)
+├── start.sh                      # Startup script
+├── package.json                  # Node.js dependencies
+├── tsconfig.json                 # TypeScript configuration
+├── tailwind.config.js           # Tailwind CSS configuration
+└── README.md                     # This file
+```
+
+## Technologies
+
+### Frontend
+- **Next.js 14** - React framework with App Router
+- **TypeScript** - Type safety
+- **Tailwind CSS** - Utility-first CSS framework
+- **Recharts** - Composable charting library
+- **Axios** - Promise-based HTTP client
+- **Lucide React** - Beautiful icon library
+
+### Backend
+- **FastAPI** - Modern, fast web framework
+- **PyIceberg** - Apache Iceberg Python library
+- **Google Cloud Storage SDK** - GCS integration
+- **fastavro** - Fast Avro file reader
+- **pyarrow** - Apache Arrow Python bindings
+- **pandas** - Data manipulation library
+- **uvicorn** - ASGI server
+
+## Troubleshooting
+
+### Authentication Issues
+
+**Problem**: "Permission denied" or "Authentication failed"
+
+**Solutions**:
+1. Make sure you're authenticated: `gcloud auth login`
+2. Check your project permissions
+3. Verify `GOOGLE_APPLICATION_CREDENTIALS` is set correctly (if using service account)
+4. Try: `gcloud auth application-default login`
+
+### Backend Won't Start
+
+**Problem**: Import errors or missing dependencies
+
+**Solutions**:
+1. Make sure virtual environment is activated: `source .venv/bin/activate`
+2. Reinstall dependencies: `pip install -r backend/requirements.txt`
+3. Check Python version: `python3 --version` (should be 3.9+)
+
+### Frontend Build Errors
+
+**Problem**: TypeScript or build errors
+
+**Solutions**:
+1. Delete `node_modules` and reinstall: `rm -rf node_modules && npm install`
+2. Clear Next.js cache: `rm -rf .next`
+3. Check Node.js version: `node --version` (should be 18+)
+
+### Snapshot IDs Not Found
+
+**Problem**: "Snapshot not found" errors
+
+**Solutions**:
+1. This is usually a precision issue with large integers
+2. Make sure you're using the latest code (snapshot IDs are now strings)
+3. Restart both backend and frontend servers
+
+### No Data Files Found
+
+**Problem**: Table shows 0 data files
+
+**Solutions**:
+1. Check that the table has snapshots (current-snapshot-id != -1)
+2. Verify the metadata file is the latest version
+3. Check backend logs for Avro parsing errors
+4. Ensure `fastavro` is installed: `pip install fastavro`
+
+### PyIceberg Catalog Errors
+
+**Problem**: "Failed to load catalog" errors
+
+**Solutions**:
+1. These errors are non-fatal - the system falls back to manual parsing
+2. The application works without PyIceberg catalog (uses fastavro instead)
+3. You can ignore these warnings in the logs
+
+## Development
+
+### Running in Development Mode
+
+Both servers support hot-reload:
+
+- **Backend**: Automatically reloads on file changes (uvicorn --reload)
+- **Frontend**: Next.js Fast Refresh enabled
+
+### Adding New Features
+
+1. **Backend**: Add endpoints in `backend/main.py`
+2. **Frontend**: Add components in `components/`
+3. **Types**: Update `types/index.ts` for new data structures
+
+### Testing
+
+```bash
+# Backend API documentation
+open http://localhost:8000/docs
+
+# Test API endpoints
+curl http://localhost:8000/projects
+curl http://localhost:8000/buckets?project_id=YOUR_PROJECT_ID
+```
+
+## Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCS service account JSON key | No* |
+| `PORT` | Backend server port (default: 8000) | No |
+| `NEXT_PUBLIC_API_URL` | Backend API URL (default: http://localhost:8000) | No |
+
+*Not required if using `gcloud auth login` (Application Default Credentials)
+
+## Performance Notes
+
+- **Large Tables**: Tables with thousands of files may take time to analyze
+- **Sample Data**: Only reads from first 3 Parquet files by default
+- **Snapshot Comparison**: Can be slow for snapshots with many files
+- **Caching**: Consider implementing caching for frequently accessed tables
+
+## Security Considerations
+
+- Never commit service account keys to version control
+- Use IAM roles with least privilege principle
+- Consider using Workload Identity for production deployments
+- The application only reads data - it does not modify Iceberg tables
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details
+
+## Support
+
+For issues, questions, or contributions, please open an issue on GitHub.
+
+---
+
+**Happy Exploring! 🚀**
