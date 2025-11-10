@@ -74,8 +74,28 @@ export default function BucketBrowser({
         setSelectedProject(projectsList[0].id);
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load projects';
-      setError(`Failed to load projects: ${errorMsg}. Make sure GCS credentials are configured and Resource Manager API is enabled.`);
+      let errorMsg = 'Failed to load projects';
+      if (err && typeof err === 'object' && 'response' in err) {
+        const axiosError = err as { response?: { status?: number; data?: { detail?: string; error?: string } } };
+        if (axiosError.response?.status === 404) {
+          errorMsg = 'Backend server not found (404). Make sure the backend is running on port 8000:\n\ncd backend && uvicorn main:app --reload';
+        } else if (axiosError.response?.status === 503) {
+          errorMsg = axiosError.response.data?.detail || 'Backend server is not running. Start it with: cd backend && uvicorn main:app --reload';
+        } else if (axiosError.response?.data?.detail) {
+          errorMsg = axiosError.response.data.detail;
+        } else if (axiosError.response?.data?.error) {
+          errorMsg = axiosError.response.data.error;
+        } else {
+          errorMsg = `Request failed with status ${axiosError.response?.status || 'unknown'}`;
+        }
+      } else if (err instanceof Error) {
+        if (err.message.includes('Network Error') || err.message.includes('ECONNREFUSED')) {
+          errorMsg = 'Cannot connect to backend server. Make sure it\'s running on port 8000:\n\ncd backend && uvicorn main:app --reload';
+        } else {
+          errorMsg = err.message;
+        }
+      }
+      setError(`${errorMsg}\n\nAlso ensure:\n- gcloud auth application-default login\n- gcloud auth application-default set-quota-project YOUR_PROJECT_ID`);
       console.error('Error loading projects:', err);
     } finally {
       setLoading(false);
