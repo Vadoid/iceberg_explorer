@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Loader2, Database, FileText, BarChart3, Layers, Table2, GitCompare } from 'lucide-react';
+import { Loader2, Database, FileText, BarChart3, Layers, Table2, GitCompare, RefreshCw } from 'lucide-react';
 import { TableInfo, TableMetadata } from '@/types';
 import axios from 'axios';
 import MetadataView from './MetadataView';
@@ -56,35 +56,11 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="animate-spin h-8 w-8 text-blue-500" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-400">
-        <div className="font-semibold mb-2">Error Loading Table Metadata</div>
-        <div className="text-sm whitespace-pre-wrap font-mono">{error}</div>
-      </div>
-    );
-  }
-
-  if (!metadata) {
-    return (
-      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-        No metadata available
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="flex space-x-4">
+        <div className="flex items-center justify-between mb-2">
+          <nav className="flex space-x-4">
           <button
             onClick={() => setActiveTab('overview')}
             className={`px-4 py-2 font-medium text-sm transition-colors ${
@@ -151,16 +127,43 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
             <GitCompare className="inline h-4 w-4 mr-1" />
             Snapshots
           </button>
-        </nav>
+          </nav>
+          <button
+            onClick={loadTableMetadata}
+            disabled={loading}
+            className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Refresh metadata"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="mt-4">
-        {activeTab === 'overview' && <MetadataView metadata={metadata} />}
-        {activeTab === 'schema' && <SchemaView metadata={metadata} />}
-        {activeTab === 'partitions' && <PartitionView metadata={metadata} />}
-        {activeTab === 'stats' && <StatsView metadata={metadata} />}
-        {activeTab === 'sample' && <SampleDataView tableInfo={tableInfo} metadata={metadata} />}
-        {activeTab === 'snapshots' && <SnapshotComparisonView tableInfo={tableInfo} metadata={metadata} />}
+        {loading && !metadata ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="animate-spin h-8 w-8 text-blue-500" />
+          </div>
+        ) : error ? (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-400">
+            <div className="font-semibold mb-2">Error Loading Table Metadata</div>
+            <div className="text-sm whitespace-pre-wrap font-mono">{error}</div>
+          </div>
+        ) : !metadata ? (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            No metadata available
+          </div>
+        ) : (
+          <>
+            {activeTab === 'overview' && <MetadataView metadata={metadata} />}
+            {activeTab === 'schema' && <SchemaView metadata={metadata} />}
+            {activeTab === 'partitions' && <PartitionView metadata={metadata} />}
+            {activeTab === 'stats' && <StatsView metadata={metadata} />}
+            {activeTab === 'sample' && <SampleDataView tableInfo={tableInfo} metadata={metadata} />}
+            {activeTab === 'snapshots' && <SnapshotComparisonView tableInfo={tableInfo} metadata={metadata} />}
+          </>
+        )}
       </div>
     </div>
   );
