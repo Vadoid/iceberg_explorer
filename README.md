@@ -4,6 +4,8 @@
 
 A comprehensive, user-friendly web interface for exploring and analyzing Apache Iceberg tables stored in Google Cloud Storage (GCS). Browse buckets, analyze table metadata, view sample data, and compare snapshots with an intuitive diff interface.
 
+Lot's of troubleshooting steps at the bottom of the page.
+
 ## Features
 
 - 🔍 **GCS Bucket Browser**: Navigate through GCS buckets and folders with project selection
@@ -52,8 +54,6 @@ gcloud auth application-default login
 # Step 3: Set your default project (optional but recommended)
 gcloud config set project YOUR_PROJECT_ID
 
-# Step 4: Set quota project for ADC (prevents billing/quota warnings)
-gcloud auth application-default set-quota-project YOUR_PROJECT_ID
 ```
 
 **Important**: `gcloud auth login` only sets credentials for the `gcloud` CLI. For Python applications, you **must** also run `gcloud auth application-default login` to set up Application Default Credentials.
@@ -219,7 +219,7 @@ Click on an Iceberg table to view detailed analysis with multiple tabs:
 
 ## API Endpoints
 
-The backend provides the following REST API endpoints:
+The backend provides the following REST API endpoints (a bit like a proper catalogue, am I right??):
 
 ### Project & Bucket Management
 
@@ -270,24 +270,6 @@ iceberg_explorer/
 └── README.md                     # This file
 ```
 
-## Technologies
-
-### Frontend
-- **Next.js 14** - React framework with App Router
-- **TypeScript** - Type safety
-- **Tailwind CSS** - Utility-first CSS framework
-- **Recharts** - Composable charting library
-- **Axios** - Promise-based HTTP client
-- **Lucide React** - Beautiful icon library
-
-### Backend
-- **FastAPI** - Modern, fast web framework
-- **PyIceberg** - Apache Iceberg Python library
-- **Google Cloud Storage SDK** - GCS integration
-- **fastavro** - Fast Avro file reader
-- **pyarrow** - Apache Arrow Python bindings
-- **pandas** - Data manipulation library
-- **uvicorn** - ASGI server
 
 ## Troubleshooting
 
@@ -440,15 +422,7 @@ curl http://localhost:8000/buckets?project_id=YOUR_PROJECT_ID
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details
+Create PR and we will merge it!
 
 ## Support
 

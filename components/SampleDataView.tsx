@@ -16,6 +16,18 @@ export default function SampleDataView({ tableInfo, metadata }: SampleDataViewPr
   const [error, setError] = useState<string | null>(null);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
 
+  const formatDate = (dateString: string) => {
+    // Format as YYYY-MM-DD HH:MM:SS (ISO-like format, unambiguous)
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  };
+
   useEffect(() => {
     if (tableInfo && metadata) {
       loadSampleData();
@@ -92,7 +104,7 @@ export default function SampleDataView({ tableInfo, metadata }: SampleDataViewPr
               <option value="">Current Snapshot</option>
               {metadata.snapshots.map((snapshot) => (
                 <option key={snapshot.snapshotId} value={snapshot.snapshotId.toString()}>
-                  Snapshot {snapshot.snapshotId} ({new Date(snapshot.timestamp).toLocaleString()})
+                  Snapshot {snapshot.snapshotId} ({formatDate(snapshot.timestamp)})
                 </option>
               ))}
             </select>

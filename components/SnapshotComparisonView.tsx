@@ -84,6 +84,18 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
     return new Intl.NumberFormat().format(num);
   };
 
+  const formatDate = (dateString: string) => {
+    // Format as YYYY-MM-DD HH:MM:SS (ISO-like format, unambiguous)
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  };
+
   if (loading && !comparison) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -121,7 +133,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
           >
             {metadata.snapshots.map((snapshot) => (
               <option key={snapshot.snapshotId} value={snapshot.snapshotId.toString()}>
-                {snapshot.snapshotId} - {new Date(snapshot.timestamp).toLocaleString()}
+                {snapshot.snapshotId} - {formatDate(snapshot.timestamp)}
               </option>
             ))}
           </select>
@@ -136,7 +148,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
           >
             {metadata.snapshots.map((snapshot) => (
               <option key={snapshot.snapshotId} value={snapshot.snapshotId.toString()}>
-                {snapshot.snapshotId} - {new Date(snapshot.timestamp).toLocaleString()}
+                {snapshot.snapshotId} - {formatDate(snapshot.timestamp)}
               </option>
             ))}
           </select>
