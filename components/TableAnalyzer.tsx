@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Loader2, Database, FileText, BarChart3, Layers, Table2, GitCompare, RefreshCw } from 'lucide-react';
+import { Loader2, Database, FileText, BarChart3, Layers, Table2, GitCompare, RefreshCw, Network } from 'lucide-react';
 import { TableInfo, TableMetadata } from '@/types';
 import axios from 'axios';
 import MetadataView from './MetadataView';
@@ -135,7 +135,7 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
             >
-              <Layers className="inline h-4 w-4 mr-1" />
+              <Network className="inline h-4 w-4 mr-1" />
               Graph
             </button>
           </nav>

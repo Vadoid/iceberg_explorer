@@ -323,7 +323,13 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
   };
 
   return (
-    <div className={`relative w-full h-full overflow-hidden bg-slate-50 ${className}`}>
+    <div
+      className={`relative w-full h-full overflow-hidden bg-slate-50 ${className}`}
+      style={{
+        backgroundImage: 'linear-gradient(#e2e8f0 1px, transparent 1px), linear-gradient(90deg, #e2e8f0 1px, transparent 1px)',
+        backgroundSize: '20px 20px'
+      }}
+    >
       {/* Controls */}
       <div className="absolute top-4 right-4 flex gap-2 z-10">
         <button onClick={expandAll} className="p-2 bg-white rounded shadow hover:bg-slate-50 text-xs font-medium">Expand All</button>
