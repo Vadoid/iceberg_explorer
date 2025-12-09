@@ -5,7 +5,7 @@ Handles GCS bucket access andpip install -r backend/requirements.txt Iceberg tab
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import os
 from google.cloud import storage
 from google.cloud import resourcemanager_v3
@@ -15,7 +15,7 @@ from datetime import datetime
 # Try to import PyIceberg for proper metadata parsing
 try:
     from pyiceberg.catalog import load_catalog
-    from pyiceberg.table import Table
+    from pyiceberg.table import Table, StaticTable
     from pyiceberg.io.pyarrow import PyArrowFileIO
     from pyiceberg.schema import Schema
     from pyiceberg.typedef import Record
@@ -491,52 +491,23 @@ def analyze_with_pyiceberg_metadata(bucket: str, path: str, project_id: Optional
         table_location = f"gs://{bucket}/{normalized_path}"
         
         # First, find the metadata file to get the exact table location
-        metadata_dict = read_iceberg_metadata_manual(bucket, path, project_id)
+        metadata_dict, metadata_location, metadata_files = read_iceberg_metadata_manual(bucket, path, project_id)
         actual_table_location = metadata_dict.get("location", table_location)
         
-        # Use PyIceberg's filesystem catalog to load the table
-        # PyIceberg can work with GCS through fsspec/gcsfs
+        # Use PyIceberg's StaticTable to load the table directly from metadata
         try:
-            # Create a filesystem catalog pointing to the table's warehouse location
-            # The warehouse is the parent directory of the table
-            warehouse_path = "/".join(actual_table_location.split("/")[:-1]) if "/" in actual_table_location else actual_table_location
-            
-            # Try different catalog type names
-            # PyIceberg 0.6.0 uses "filesystem" as the catalog type
-            try:
-                catalog = load_catalog(
-                    "filesystem",
-                    **{
-                        "type": "filesystem",
-                        "warehouse": warehouse_path,
-                    }
-                )
-            except Exception as e1:
-                # Try alternative catalog type
-                try:
-                    catalog = load_catalog(
-                        "gcs",
-                        **{
-                            "type": "filesystem",
-                            "warehouse": warehouse_path,
-                        }
-                    )
-                except Exception as e2:
-                    raise Exception(f"Failed to load catalog with both 'filesystem' and 'gcs' types: {e1}, {e2}")
+            # StaticTable.from_metadata expects the full path to the metadata file
+            # We need to construct the full GCS path if it's not already
+            if not metadata_location.startswith("gs://"):
+                full_metadata_location = f"gs://{bucket}/{metadata_location}"
+            else:
+                full_metadata_location = metadata_location
+                
+            print(f"Loading StaticTable from metadata: {full_metadata_location}")
+            table = StaticTable.from_metadata(full_metadata_location)
             
             # Extract namespace and table name from path
-            # For filesystem catalog, we need to construct the identifier
-            # The table name is the last part of the path
             table_name = normalized_path.split("/")[-1] if "/" in normalized_path else normalized_path
-            namespace = ".".join(normalized_path.split("/")[:-1]) if "/" in normalized_path else "default"
-            
-            # Try to load the table
-            try:
-                table_identifier = f"{namespace}.{table_name}" if namespace != "default" else table_name
-                table = catalog.load_table(table_identifier)
-            except Exception:
-                # If that doesn't work, try just the table name
-                table = catalog.load_table(table_name)
             
             # Now use PyIceberg's API to get all information
             # Get schema
@@ -581,34 +552,44 @@ def analyze_with_pyiceberg_metadata(bucket: str, path: str, project_id: Optional
             partition_map = {}
             
             for task in file_scan_tasks:
-                for data_file in task:
-                    # Extract partition information
-                    partition = {}
-                    if hasattr(data_file, 'partition') and data_file.partition:
-                        partition = dict(data_file.partition)
-                    
-                    partition_key = json.dumps(partition, sort_keys=True)
-                    
-                    file_info = {
-                        "filePath": data_file.file_path if hasattr(data_file, 'file_path') else str(data_file),
-                        "fileFormat": "parquet",  # Iceberg typically uses Parquet
+                data_file = task.file
+                # Extract partition information
+                # Extract partition information
+                partition = {}
+                if hasattr(data_file, 'partition') and data_file.partition:
+                    try:
+                        spec = table.specs()[data_file.spec_id]
+                        # Map partition fields to values
+                        for field in spec.fields:
+                            # Access value by field name from the partition record
+                            val = getattr(data_file.partition, field.name, None)
+                            partition[field.name] = val
+                    except Exception:
+                        # Fallback if something goes wrong
+                        partition = {}
+                
+                partition_key = json.dumps(partition, sort_keys=True)
+                
+                file_info = {
+                    "filePath": data_file.file_path if hasattr(data_file, 'file_path') else str(data_file),
+                    "fileFormat": "parquet",  # Iceberg typically uses Parquet
+                    "partition": partition,
+                    "recordCount": data_file.record_count if hasattr(data_file, 'record_count') else 0,
+                    "fileSizeInBytes": data_file.file_size_in_bytes if hasattr(data_file, 'file_size_in_bytes') else 0,
+                }
+                data_files.append(file_info)
+                
+                # Aggregate partition stats
+                if partition_key not in partition_map:
+                    partition_map[partition_key] = {
                         "partition": partition,
-                        "recordCount": data_file.record_count if hasattr(data_file, 'record_count') else 0,
-                        "fileSizeInBytes": data_file.file_size_in_bytes if hasattr(data_file, 'file_size_in_bytes') else 0,
+                        "fileCount": 0,
+                        "recordCount": 0,
+                        "totalSize": 0,
                     }
-                    data_files.append(file_info)
-                    
-                    # Aggregate partition stats
-                    if partition_key not in partition_map:
-                        partition_map[partition_key] = {
-                            "partition": partition,
-                            "fileCount": 0,
-                            "recordCount": 0,
-                            "totalSize": 0,
-                        }
-                    partition_map[partition_key]["fileCount"] += 1
-                    partition_map[partition_key]["recordCount"] += file_info["recordCount"]
-                    partition_map[partition_key]["totalSize"] += file_info["fileSizeInBytes"]
+                partition_map[partition_key]["fileCount"] += 1
+                partition_map[partition_key]["recordCount"] += file_info["recordCount"]
+                partition_map[partition_key]["totalSize"] += file_info["fileSizeInBytes"]
             
             partition_stats = list(partition_map.values())
             
@@ -616,20 +597,100 @@ def analyze_with_pyiceberg_metadata(bucket: str, path: str, project_id: Optional
             snapshots = []
             current_snapshot = table.current_snapshot()
             if current_snapshot:
-                snapshots.append({
-                    "snapshotId": str(current_snapshot.snapshot_id),  # Convert to string to preserve precision
+                snapshot_data = {
+                    "snapshotId": str(current_snapshot.snapshot_id),
                     "timestamp": datetime.fromtimestamp(current_snapshot.timestamp_ms / 1000).isoformat() if current_snapshot.timestamp_ms else None,
                     "summary": current_snapshot.summary if hasattr(current_snapshot, 'summary') else {},
                     "manifestList": current_snapshot.manifest_list if hasattr(current_snapshot, 'manifest_list') else "",
-                })
+                    "manifests": []
+                }
+                
+                try:
+                    # Get manifests
+                    for manifest in current_snapshot.manifests(table.io):
+                        manifest_data = {
+                            "path": manifest.manifest_path,
+                            "length": manifest.manifest_length,
+                            "partitionSpecId": manifest.partition_spec_id,
+                            "addedSnapshotId": manifest.added_snapshot_id,
+                            "dataFiles": []
+                        }
+                        
+                        # Get data files for this manifest (limit to 5)
+                        try:
+                            entries = manifest.fetch_manifest_entry(table.io)
+                            count = 0
+                            for entry in entries:
+                                if count >= 5:
+                                    break
+                                data_file = entry.data_file
+                                manifest_data["dataFiles"].append({
+                                    "path": data_file.file_path,
+                                    "format": str(data_file.file_format),
+                                    "recordCount": data_file.record_count,
+                                    "fileSizeInBytes": data_file.file_size_in_bytes
+                                })
+                                count += 1
+                        except Exception as e:
+                            print(f"Error reading manifest entries for {manifest.manifest_path}: {e}")
+                            
+                        snapshot_data["manifests"].append(manifest_data)
+                except Exception as e:
+                    print(f"Error reading manifests for snapshot {current_snapshot.snapshot_id}: {e}")
+                
+                snapshots.append(snapshot_data)
             
             # Get table properties
-            properties = table.properties() if hasattr(table, 'properties') else {}
+            properties = table.properties if hasattr(table, 'properties') else {}
             
+            # Use metadata_log for metadataFiles if available
+            final_metadata_files = metadata_files
+            if hasattr(table.metadata, 'metadata_log') and table.metadata.metadata_log:
+                log_files = []
+                # Add historical files
+                for entry in table.metadata.metadata_log:
+                    log_files.append({
+                        "file": entry.metadata_file,
+                        "version": -1, # We might not know the version number easily from log, but we can try to parse
+                        "timestamp": entry.timestamp_ms,
+                        "currentSnapshotId": None,
+                        "previousMetadataFile": None
+                    })
+                
+                # Add current file
+                current_file_info = {
+                    "file": full_metadata_location,
+                    "version": -1,
+                    "timestamp": table.metadata.last_updated_ms,
+                    "currentSnapshotId": str(table.metadata.current_snapshot_id) if table.metadata.current_snapshot_id else None,
+                    "previousMetadataFile": None
+                }
+                
+                # Check if current file is already in log (it usually isn't)
+                if not any(f["file"] == current_file_info["file"] for f in log_files):
+                    log_files.append(current_file_info)
+                
+                # Try to extract versions from filenames for better display
+                for f in log_files:
+                    try:
+                        filename = f["file"].split("/")[-1]
+                        if filename.startswith("v") and ".metadata.json" in filename:
+                            version_part = filename.split(".")[0][1:]
+                            f["version"] = int(version_part)
+                        elif "-" in filename:
+                             # Try {version}-{uuid}
+                             parts = filename.split("-")
+                             if parts[0].isdigit():
+                                 f["version"] = int(parts[0])
+                    except:
+                        pass
+                
+                final_metadata_files = log_files
+
             return {
                 "tableName": table_name,
                 "location": actual_table_location,
-                "formatVersion": table.format_version() if hasattr(table, 'format_version') else metadata_dict.get("format-version", 1),
+                "formatVersion": table.format_version if hasattr(table, 'format_version') else metadata_dict.get("format-version", 1),
                 "schema": schema_fields,
                 "partitionSpec": partition_spec_fields,
                 "sortOrder": sort_order_fields,
@@ -638,6 +699,7 @@ def analyze_with_pyiceberg_metadata(bucket: str, path: str, project_id: Optional
                 "snapshots": snapshots,
                 "dataFiles": data_files,
                 "partitionStats": partition_stats,
+                "metadataFiles": final_metadata_files,
             }
             
         except Exception as catalog_error:
@@ -929,7 +991,7 @@ def analyze_with_pyiceberg_metadata(bucket: str, path: str, project_id: Optional
         return None
 
 
-def read_iceberg_metadata_manual(bucket: str, path: str, project_id: Optional[str] = None) -> Dict[str, Any]:
+def read_iceberg_metadata_manual(bucket: str, path: str, project_id: Optional[str] = None) -> Tuple[Dict[str, Any], str, List[Dict[str, Any]]]:
     """Manually read Iceberg metadata from GCS
     
     According to Apache Iceberg spec:
@@ -1038,102 +1100,76 @@ def read_iceberg_metadata_manual(bucket: str, path: str, project_id: Optional[st
                 except Exception:
                     pass
             
-            raise Exception(error_msg)
+            raise FileNotFoundError(error_msg)
+            
+        # Parse metadata files to find the latest one and collect info
+        latest_version = -1
+        latest_metadata_blob = None
+        latest_metadata_dict = {}
         
-        # Get the latest metadata file (highest version number)
-        # Iceberg metadata files are versioned: 00000-*.metadata.json, 00001-*.metadata.json, etc.
-        def extract_version(blob_name: str) -> int:
+        metadata_files_info = []
+        
+        for blob in metadata_json_files:
             try:
-                filename = blob_name.split("/")[-1]  # Get just the filename
+                # Extract version from filename
+                filename = blob.name.split("/")[-1]
+                version = -1
                 
-                # Pattern 1: {zero-padded-number}-{hash}.metadata.json (e.g., 00002-abc123.metadata.json)
-                # This is the most common format in Iceberg v2
-                if "-" in filename and ".metadata.json" in filename:
-                    version_str = filename.split("-")[0]
-                    # Handle zero-padded numbers like "00002" -> 2
-                    if version_str.isdigit():
-                        return int(version_str)
-                
-                # Pattern 2: v{number}.metadata.json (older format)
+                # Try v{version}.metadata.json format
                 if filename.startswith("v") and ".metadata.json" in filename:
-                    version_part = filename[1:].split(".metadata.json")[0]
-                    version_str = version_part.split("-")[0]
-                    if version_str.isdigit():
-                        return int(version_str)
+                    try:
+                        version_part = filename.split(".")[0][1:]
+                        version = int(version_part)
+                    except ValueError:
+                        pass
                 
-                # Pattern 3: Just a number at the start
-                if filename[0].isdigit():
-                    version_str = filename.split(".")[0].split("-")[0]
-                    if version_str.isdigit():
-                        return int(version_str)
+                # Try {version}-{uuid}.metadata.json format
+                if version == -1 and "-" in filename:
+                    try:
+                        version_part = filename.split("-")[0]
+                        version = int(version_part)
+                    except ValueError:
+                        pass
                 
-                # If no version pattern found, return -1 (will be sorted last)
-                return -1
-            except (ValueError, IndexError, AttributeError):
-                return -1
-        
-        if not metadata_json_files:
-            raise Exception(f"No metadata files found. Expected files like '00000-*.metadata.json' in '{metadata_dir}' directory")
-        
-        # Sort by version (highest first) and get the latest
-        # Also sort by name as secondary key to ensure consistent ordering
-        metadata_json_files.sort(key=lambda x: (extract_version(x.name), x.name), reverse=True)
-        
-        # Verify we have files and log all versions found
-        if metadata_json_files:
-            print(f"Found {len(metadata_json_files)} metadata files:")
-            for f in metadata_json_files[:5]:  # Show first 5
-                print(f"  - {f.name} (version: {extract_version(f.name)})")
-        
-        # Strategy: Use the HIGHEST VERSION file (already sorted), but verify it has data
-        # If the highest version is empty, try the next highest version with data
-        latest_metadata = None
-        best_metadata = None
-        best_version = -1
-        
-        # Start with the highest version file (first in sorted list)
-        for metadata_file in metadata_json_files:
-            try:
-                content = metadata_file.download_as_text()
-                test_metadata = json.loads(content)
-                test_snapshot_id = test_metadata.get("current-snapshot-id", -1)
-                test_version = extract_version(metadata_file.name)
+                # If version found, add to list
+                file_info = {
+                    "file": f"gs://{bucket}/{blob.name}",
+                    "version": version,
+                    "timestamp": blob.updated.timestamp() * 1000 if blob.updated else 0,
+                    "currentSnapshotId": None,
+                    "previousMetadataFile": None
+                }
                 
-                # Use the highest version file that has actual snapshots
-                # Priority: version number first, then check if it has data
-                if test_version > best_version:
-                    if test_snapshot_id != -1:  # Only use files with actual data
-                        best_metadata = test_metadata
-                        best_version = test_version
-                        latest_metadata = metadata_file
-                        print(f"  Candidate: {metadata_file.name} (version={test_version}, snapshot-id={test_snapshot_id})")
+                metadata_files_info.append(file_info)
+                
+                if version > latest_version:
+                    latest_version = version
+                    latest_metadata_blob = blob
             except Exception as e:
-                print(f"  Error reading {metadata_file.name}: {str(e)}")
+                print(f"Error parsing metadata file {blob.name}: {str(e)}")
                 continue
         
-        # If we found a file with data, use it
-        if latest_metadata and best_metadata:
-            current_snapshot_id = best_metadata.get("current-snapshot-id", -1)
-            print(f"Selected metadata file: {latest_metadata.name} (version: {best_version}, current-snapshot-id: {current_snapshot_id})")
-            return best_metadata
+        # If we couldn't determine version from filename, use timestamp
+        if latest_version == -1 and metadata_json_files:
+            metadata_json_files.sort(key=lambda x: x.updated if x.updated else datetime.min, reverse=True)
+            latest_metadata_blob = metadata_json_files[0]
         
-        # Fallback: use highest version file even if empty
-        if metadata_json_files:
-            latest_metadata = metadata_json_files[0]
-            latest_version = extract_version(latest_metadata.name)
-            print(f"Using highest version file (may be empty): {latest_metadata.name} (version: {latest_version})")
+        if not latest_metadata_blob:
+            raise FileNotFoundError(f"Could not determine latest metadata file in {normalized_path}")
             
-            try:
-                metadata_content = latest_metadata.download_as_text()
-                metadata = json.loads(metadata_content)
-                current_snapshot_id = metadata.get("current-snapshot-id", -1)
-                snapshots_count = len(metadata.get("snapshots", []))
-                print(f"Metadata file check: current-snapshot-id={current_snapshot_id}, snapshots={snapshots_count}")
-                return metadata
-            except Exception as e:
-                raise Exception(f"Failed to parse metadata file {latest_metadata.name}: {str(e)}")
+        # Read the latest metadata file
+        json_content = latest_metadata_blob.download_as_text()
+        latest_metadata_dict = json.loads(json_content)
         
-        raise Exception("No valid metadata files found")
+        # Update the info for the latest file with actual content
+        latest_file_path = f"gs://{bucket}/{latest_metadata_blob.name}"
+        for info in metadata_files_info:
+            if info["file"] == latest_file_path:
+                info["currentSnapshotId"] = str(latest_metadata_dict.get("current-snapshot-id", -1))
+                info["previousMetadataFile"] = latest_metadata_dict.get("previous-metadata-file")
+                break
+                
+        return latest_metadata_dict, latest_file_path, metadata_files_info
         
     except Exception as e:
         import traceback
@@ -1412,7 +1448,7 @@ async def analyze_table(bucket: str, path: str, project_id: Optional[str] = None
         
         # Fall back to manual metadata reading
         try:
-            metadata = read_iceberg_metadata_manual(bucket, normalized_path, project_id=project_id)
+            metadata, _ = read_iceberg_metadata_manual(bucket, normalized_path, project_id=project_id)
         except Exception as e:
             # Provide more detailed error information
             error_msg = str(e)
@@ -1902,8 +1938,8 @@ async def get_sample_data(
 async def compare_snapshots(
     bucket: str,
     path: str,
-    snapshot_id_1: str,
-    snapshot_id_2: str,
+    snapshot_id_1: Optional[str] = None,
+    snapshot_id_2: str = "",
     project_id: Optional[str] = None
 ):
     """Compare two snapshots to see what changed"""
@@ -1912,7 +1948,7 @@ async def compare_snapshots(
         
         # Convert string IDs to int for comparison (handles large integers)
         try:
-            snapshot_id_1_int = int(snapshot_id_1)
+            snapshot_id_1_int = int(snapshot_id_1) if snapshot_id_1 else None
             snapshot_id_2_int = int(snapshot_id_2)
         except ValueError:
             raise HTTPException(
@@ -1936,7 +1972,7 @@ async def compare_snapshots(
             if snap_id == snapshot_id_2_int:
                 snapshot2 = snap
         
-        if not snapshot1:
+        if snapshot_id_1_int is not None and not snapshot1:
             raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id_1} not found")
         if not snapshot2:
             raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id_2} not found")
@@ -1945,7 +1981,7 @@ async def compare_snapshots(
         files1 = []
         files2 = []
         
-        if snapshot1.get("manifestList"):
+        if snapshot1 and snapshot1.get("manifestList"):
             files1 = get_manifest_files(bucket, normalized_path, snapshot1["manifestList"], project_id)
         if snapshot2.get("manifestList"):
             files2 = get_manifest_files(bucket, normalized_path, snapshot2["manifestList"], project_id)
@@ -1979,11 +2015,11 @@ async def compare_snapshots(
                     })
         
         # Calculate statistics delta
-        stats1 = snapshot1.get("statistics", {})
+        stats1 = snapshot1.get("statistics", {}) if snapshot1 else {"fileCount": 0, "recordCount": 0, "totalSize": 0}
         stats2 = snapshot2.get("statistics", {})
         
         return {
-            "snapshot1": snapshot1,
+            "snapshot1": snapshot1 or {"snapshotId": "None", "timestamp": "", "statistics": stats1},
             "snapshot2": snapshot2,
             "addedFiles": added_files,
             "removedFiles": removed_files,
@@ -2012,6 +2048,278 @@ async def compare_snapshots(
             status_code=500,
             detail=f"Failed to compare snapshots: {str(e)}\n\n{traceback.format_exc()}"
         )
+
+
+@app.get("/graph")
+async def get_table_graph(bucket: str, path: str, project_id: Optional[str] = None, mode: str = "current"):
+    """Get hierarchical graph data for the table
+    
+    Modes:
+    - "current": Only shows the current state (current metadata -> current snapshot -> etc.)
+    - "full": Shows all history (all metadata files -> all snapshots -> etc.)
+    """
+    try:
+        normalized_path = path.strip("/")
+        
+        if mode == "full":
+            return await get_full_graph_data(bucket, normalized_path, project_id)
+        
+        # Current mode (existing logic)
+        # Get full table analysis
+        table_data = await analyze_table(bucket, normalized_path, project_id)
+        
+        # Construct graph structure
+        snapshots_data = []
+        
+        # Only show snapshots reachable from current state (already filtered by analyze_table usually)
+        # But analyze_table returns 'snapshots' list which is the history.
+        # We'll stick to what analyze_table returns for "current" mode (which is the active history)
+        
+        for snapshot in table_data.get("snapshots", []):
+            manifest_list_path = snapshot.get("manifestList", "")
+            manifests = []
+            
+            if manifest_list_path:
+                manifests = await get_manifests_from_list(bucket, manifest_list_path, project_id)
+            
+            snapshots_data.append({
+                "snapshotId": snapshot.get("snapshotId"),
+                "timestamp": snapshot.get("timestamp"),
+                "manifestList": manifest_list_path,
+                "manifests": manifests,
+                "summary": snapshot.get("summary", {})
+            })
+            
+        return {
+            "tableName": table_data.get("tableName"),
+            "location": table_data.get("location"),
+            "snapshots": snapshots_data,
+            "metadataFiles": [] # No extra metadata files in current mode
+        }
+    except Exception as e:
+        import traceback
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get graph data: {str(e)}\n\n{traceback.format_exc()}"
+        )
+
+async def get_manifests_from_list(bucket: str, manifest_list_path: str, project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Helper to extract manifests from a manifest list file"""
+    manifests = []
+    try:
+        client = get_storage_client(project_id=project_id)
+        bucket_obj = client.bucket(bucket)
+        manifest_path_clean = manifest_list_path.replace(f"gs://{bucket}/", "").lstrip("/")
+        manifest_list_blob = bucket_obj.blob(manifest_path_clean)
+        
+        manifest_list_data = None
+        if FASTAVRO_AVAILABLE:
+            try:
+                from io import BytesIO
+                manifest_bytes = manifest_list_blob.download_as_bytes()
+                manifest_bytes_io = BytesIO(manifest_bytes)
+                manifest_bytes_io.seek(0)
+                manifest_list_data = list(fastavro.reader(manifest_bytes_io))
+            except Exception:
+                pass
+        
+        if not manifest_list_data:
+            try:
+                content = manifest_list_blob.download_as_text()
+                manifest_list_data = json.loads(content)
+            except Exception:
+                pass
+        
+        if manifest_list_data:
+            raw_manifests = []
+            if isinstance(manifest_list_data, list):
+                raw_manifests = manifest_list_data
+            elif isinstance(manifest_list_data, dict):
+                if "manifests" in manifest_list_data:
+                    raw_manifests = manifest_list_data["manifests"]
+                else:
+                    raw_manifests = [manifest_list_data]
+            
+            for m in raw_manifests:
+                m_path = None
+                if isinstance(m, str):
+                    m_path = m
+                elif isinstance(m, dict):
+                    m_path = m.get("manifest_path") or m.get("manifestPath") or m.get("path")
+                if m_path:
+                    manifests.append({
+                        "path": m_path,
+                        "length": m.get("length", 0) if isinstance(m, dict) else 0,
+                        "partitionSpecId": m.get("partition_spec_id", 0) if isinstance(m, dict) else 0,
+                        "addedSnapshotId": m.get("added_snapshot_id", 0) if isinstance(m, dict) else 0,
+                        "added_data_files_count": m.get("added_files_count", 0) if isinstance(m, dict) else 0,
+                        # We will populate dataFiles later or in a separate pass if needed
+                        # For now, let's just keep it simple and maybe load them on demand in frontend?
+                        # OR we can just load a few here.
+                        "dataFiles": [] 
+                    })
+    except Exception as e:
+        print(f"Error getting manifests: {e}")
+    return manifests
+
+async def get_data_files_sample(bucket: str, manifest_path: str, limit: int = 5, project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Get a sample of data files from a manifest"""
+    try:
+        client = get_storage_client(project_id=project_id)
+        bucket_obj = client.bucket(bucket)
+        manifest_path_clean = manifest_path.replace(f"gs://{bucket}/", "").lstrip("/")
+        manifest_blob = bucket_obj.blob(manifest_path_clean)
+        
+        manifest_data = None
+        if FASTAVRO_AVAILABLE:
+            try:
+                from io import BytesIO
+                manifest_bytes = manifest_blob.download_as_bytes()
+                manifest_bytes_io = BytesIO(manifest_bytes)
+                manifest_bytes_io.seek(0)
+                manifest_data = list(fastavro.reader(manifest_bytes_io))
+            except Exception:
+                pass
+        
+        if not manifest_data:
+            try:
+                content = manifest_blob.download_as_text()
+                manifest_data = json.loads(content)
+            except Exception:
+                pass
+                
+        data_files = []
+        if manifest_data:
+            entries = []
+            if isinstance(manifest_data, list):
+                entries = manifest_data
+            elif isinstance(manifest_data, dict):
+                if "entries" in manifest_data:
+                    entries = manifest_data["entries"]
+                else:
+                    entries = [manifest_data]
+            
+            count = 0
+            for entry in entries:
+                if count >= limit:
+                    break
+                
+                # Extract data file info
+                data_file = entry.get("data_file") or entry.get("dataFile") or entry
+                if not isinstance(data_file, dict): continue
+                
+                path = data_file.get("file_path") or data_file.get("filePath") or data_file.get("path")
+                if path:
+                    data_files.append({
+                        "path": path,
+                        "format": data_file.get("file_format") or data_file.get("fileFormat") or "parquet",
+                        "recordCount": data_file.get("record_count") or data_file.get("recordCount") or 0,
+                        "fileSizeInBytes": data_file.get("file_size_in_bytes") or data_file.get("fileSizeInBytes") or 0
+                    })
+                    count += 1
+                    
+        return data_files
+    except Exception as e:
+        print(f"Error getting data files sample: {e}")
+        return []
+
+async def get_full_graph_data(bucket: str, path: str, project_id: Optional[str] = None):
+    """Get ALL metadata files, snapshots, and manifests for the full history"""
+    client = get_storage_client(project_id=project_id)
+    bucket_obj = client.bucket(bucket)
+    
+    # 1. Find all metadata files
+    metadata_files = []
+    metadata_dir = f"{path}/metadata/"
+    
+    # List all files in metadata dir
+    try:
+        blobs = list(bucket_obj.list_blobs(prefix=metadata_dir))
+        for blob in blobs:
+            if blob.name.endswith(".metadata.json"):
+                metadata_files.append(blob)
+    except Exception:
+        pass
+        
+    # Sort by version if possible, or name
+    metadata_files.sort(key=lambda x: x.name)
+    
+    all_snapshots = {} # Map snapshotId -> snapshot data
+    metadata_nodes = []
+    
+    # Process each metadata file
+    for blob in metadata_files:
+        try:
+            content = blob.download_as_text()
+            meta = json.loads(content)
+            
+            # Extract version from filename
+            filename = blob.name.split("/")[-1]
+            version = -1
+            if filename.startswith("v"):
+                try:
+                    version = int(filename[1:].split(".")[0].split("-")[0])
+                except: pass
+            elif "-" in filename:
+                try:
+                    version = int(filename.split("-")[0])
+                except: pass
+                
+            current_snap_id = meta.get("current-snapshot-id")
+            parent_meta = meta.get("previous-metadata-file") # V2 field
+            
+            metadata_nodes.append({
+                "file": blob.name,
+                "version": version,
+                "currentSnapshotId": str(current_snap_id) if current_snap_id else None,
+                "previousMetadataFile": parent_meta,
+                "timestamp": meta.get("last-updated-ms", 0)
+            })
+            
+            # Collect snapshots
+            if "snapshots" in meta and isinstance(meta["snapshots"], list):
+                for snap in meta["snapshots"]:
+                    snap_id = str(snap.get("snapshot-id") or snap.get("sequence-number"))
+                    if snap_id not in all_snapshots:
+                        # Get manifest list
+                        manifest_list = snap.get("manifest-list", "")
+                        manifests = []
+                        if manifest_list:
+                             manifests = await get_manifests_from_list(bucket, manifest_list, project_id)
+                             # Populate data files for these manifests
+                             for m in manifests:
+                                 # Limit data files to avoid explosion, but indicate total count
+                                 m["dataFiles"] = await get_data_files_sample(bucket, m["path"], limit=10, project_id=project_id)
+                                 # We already have length/added_data_files_count from manifest list, but let's ensure we have it
+                                 if "added_data_files_count" not in m and "dataFiles" in m:
+                                     m["added_data_files_count"] = len(m["dataFiles"]) # Fallback
+                        
+                        ts = snap.get("timestamp-ms", 0)
+                        all_snapshots[snap_id] = {
+                            "snapshotId": snap_id,
+                            "timestamp": datetime.fromtimestamp(ts / 1000).isoformat() if ts else None,
+                            "manifestList": manifest_list,
+                            "manifests": manifests,
+                            "summary": snap.get("summary", {}),
+                            "parentId": str(snap.get("parent-snapshot-id")) if snap.get("parent-snapshot-id") else None
+                        }
+        except Exception as e:
+            print(f"Error processing metadata file {blob.name}: {e}")
+            
+    # 2. Build the full graph structure
+    graph_data = {
+        "tableName": path.split("/")[-1],
+        "location": f"gs://{bucket}/{path}",
+        "catalog": {
+            "name": "Iceberg Catalog",
+            "type": "hadoop", # Assuming hadoop/fs based on structure
+            "description": "Source of Truth"
+        },
+        "metadataFiles": metadata_nodes,
+        "snapshots": list(all_snapshots.values())
+    }
+    
+    return graph_data
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ import PartitionView from './PartitionView';
 import StatsView from './StatsView';
 import SampleDataView from './SampleDataView';
 import SnapshotComparisonView from './SnapshotComparisonView';
+import IcebergGraphView from './IcebergGraphView';
 
 interface TableAnalyzerProps {
   tableInfo: TableInfo;
@@ -19,7 +20,7 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
   const [metadata, setMetadata] = useState<TableMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'schema' | 'partitions' | 'stats' | 'sample' | 'snapshots'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'schema' | 'partitions' | 'stats' | 'sample' | 'snapshots' | 'graph'>('overview');
 
   useEffect(() => {
     if (tableInfo) {
@@ -57,13 +58,13 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between mb-2">
-          <nav className="flex space-x-4">
+    <div className="h-full flex flex-col">
+      <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-4">
+          <nav className="flex space-x-4 overflow-x-auto pb-2 sm:pb-0 no-scrollbar">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`px-4 py-2 font-medium text-sm transition-colors ${
+              className={`px-4 py-2 font-medium text-sm transition-colors whitespace-nowrap ${
               activeTab === 'overview'
                 ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
@@ -74,7 +75,7 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
           </button>
           <button
             onClick={() => setActiveTab('schema')}
-            className={`px-4 py-2 font-medium text-sm transition-colors ${
+              className={`px-4 py-2 font-medium text-sm transition-colors whitespace-nowrap ${
               activeTab === 'schema'
                 ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
@@ -85,7 +86,7 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
           </button>
           <button
             onClick={() => setActiveTab('partitions')}
-            className={`px-4 py-2 font-medium text-sm transition-colors ${
+              className={`px-4 py-2 font-medium text-sm transition-colors whitespace-nowrap ${
               activeTab === 'partitions'
                 ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
@@ -96,7 +97,7 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
           </button>
           <button
             onClick={() => setActiveTab('stats')}
-            className={`px-4 py-2 font-medium text-sm transition-colors ${
+              className={`px-4 py-2 font-medium text-sm transition-colors whitespace-nowrap ${
               activeTab === 'stats'
                 ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
@@ -107,7 +108,7 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
           </button>
           <button
             onClick={() => setActiveTab('sample')}
-            className={`px-4 py-2 font-medium text-sm transition-colors ${
+              className={`px-4 py-2 font-medium text-sm transition-colors whitespace-nowrap ${
               activeTab === 'sample'
                 ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
@@ -118,7 +119,7 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
           </button>
           <button
             onClick={() => setActiveTab('snapshots')}
-            className={`px-4 py-2 font-medium text-sm transition-colors ${
+              className={`px-4 py-2 font-medium text-sm transition-colors whitespace-nowrap ${
               activeTab === 'snapshots'
                 ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
@@ -127,20 +128,32 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
             <GitCompare className="inline h-4 w-4 mr-1" />
             Snapshots
           </button>
+            <button
+              onClick={() => setActiveTab('graph')}
+              className={`px-4 py-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === 'graph'
+                ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+            >
+              <Layers className="inline h-4 w-4 mr-1" />
+              Graph
+            </button>
           </nav>
-          <button
-            onClick={loadTableMetadata}
-            disabled={loading}
-            className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Refresh metadata"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex-shrink-0">
+            <button
+              onClick={loadTableMetadata}
+              disabled={loading}
+              className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto justify-center"
+              title="Refresh metadata"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="flex-1 min-h-0 overflow-auto">
         {loading && !metadata ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="animate-spin h-8 w-8 text-blue-500" />
@@ -155,14 +168,15 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
             No metadata available
           </div>
         ) : (
-          <>
+                <div className="h-full flex flex-col">
             {activeTab === 'overview' && <MetadataView metadata={metadata} />}
             {activeTab === 'schema' && <SchemaView metadata={metadata} />}
             {activeTab === 'partitions' && <PartitionView metadata={metadata} />}
             {activeTab === 'stats' && <StatsView metadata={metadata} />}
             {activeTab === 'sample' && <SampleDataView tableInfo={tableInfo} metadata={metadata} />}
             {activeTab === 'snapshots' && <SnapshotComparisonView tableInfo={tableInfo} metadata={metadata} />}
-          </>
+                  {activeTab === 'graph' && <div className="h-full"><IcebergGraphView tableInfo={tableInfo} /></div>}
+                </div>
         )}
       </div>
     </div>

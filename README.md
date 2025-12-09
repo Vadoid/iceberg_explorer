@@ -2,18 +2,18 @@
 
 ![Iceberg Explorer](explorer.png)
 
-A comprehensive, user-friendly web interface for exploring and analyzing Apache Iceberg tables stored in Google Cloud Storage (GCS). Browse buckets, analyze table metadata, view sample data, and compare snapshots with an intuitive diff interface.
+A comprehensive, user-friendly web interface for exploring and analyzing Apache Iceberg tables stored in Google Cloud Storage (GCS). Browse buckets, analyze table metadata, view sample data, and visualize table architecture with pixel-perfect diagrams.
 
 ## Features
 
 - 🔍 **GCS Bucket Browser**: Navigate through GCS buckets and folders with project selection
 - 📊 **Table Analysis**: Comprehensive analysis of Iceberg table metadata, schema, and partitions
+- 🎨 **Architecture Visualization**: Custom SVG-based interactive diagrams showing the hierarchy of Metadata, Snapshots, Manifest Lists, Manifests, and Data Files
 - 📈 **Visualizations**: Interactive charts for partitions, file sizes, and statistics
 - 📋 **Sample Data**: View sample rows from your Iceberg tables
 - 🔄 **Snapshot Comparison**: Compare snapshots to see what changed (like GitHub diff)
 - 🎯 **Table Discovery**: Automatically discover all Iceberg tables in a bucket
-- 📦 **Partition Analysis**: Detailed partition statistics and visualizations
-- 🎨 **Responsive UI**: Modern, user-friendly interface that works on all devices
+- 📱 **Responsive UI**: Modern, user-friendly interface that works on all devices
 - 🔐 **GCS Integration**: Seamless connection to Google Cloud Storage
 
 ## Prerequisites
@@ -182,6 +182,11 @@ Click on an Iceberg table to view detailed analysis with multiple tabs:
 - Current snapshot information
 - Table properties
 
+#### Architecture Tab
+- **Interactive Graph**: Visualizes the relationship between Metadata, Snapshots, Manifest Lists, Manifests, and Data Files
+- **Custom SVG Layout**: Pixel-perfect representation of the Iceberg spec
+- **Zoom & Pan**: Explore large table structures easily
+
 #### Schema Tab
 - Complete schema with field types, IDs, and documentation
 - Field hierarchy and relationships
@@ -206,16 +211,6 @@ Click on an Iceberg table to view detailed analysis with multiple tabs:
 - See added, removed, and modified files
 - View statistics delta (like GitHub diff)
 - Color-coded changes (green=added, red=removed, yellow=modified)
-
-### 5. Compare Snapshots
-
-1. Navigate to the **Snapshots** tab
-2. Select two snapshots from the dropdowns
-3. View the comparison showing:
-   - Summary cards with change counts
-   - Statistics comparison with deltas
-   - Lists of added, removed, and modified files
-   - Detailed file-level changes
 
 ## API Endpoints
 
@@ -251,6 +246,8 @@ iceberg_explorer/
 ├── components/                    # React components
 │   ├── BucketBrowser.tsx         # GCS bucket navigation
 │   ├── TableAnalyzer.tsx         # Main table analysis component
+│   ├── IcebergGraphView.tsx      # Graph view container
+│   ├── IcebergTree.tsx           # Custom SVG architecture visualization
 │   ├── MetadataView.tsx          # Table metadata display
 │   ├── SchemaView.tsx            # Schema information
 │   ├── PartitionView.tsx         # Partition analysis with charts
@@ -279,6 +276,7 @@ iceberg_explorer/
 - **Recharts** - Composable charting library
 - **Axios** - Promise-based HTTP client
 - **Lucide React** - Beautiful icon library
+- **Custom SVG** - Bespoke visualization engine for Iceberg trees
 
 ### Backend
 - **FastAPI** - Modern, fast web framework
@@ -344,22 +342,6 @@ iceberg_explorer/
    ```
    Then update `next.config.js` to proxy to port 8001 instead of 8000.
 
-**Problem**: Import errors or missing dependencies
-
-**Solutions**:
-1. Make sure virtual environment is activated: `source .venv/bin/activate`
-2. Reinstall dependencies: `pip install -r backend/requirements.txt`
-3. Check Python version: `python3 --version` (should be 3.9+)
-
-### Frontend Build Errors
-
-**Problem**: TypeScript or build errors
-
-**Solutions**:
-1. Delete `node_modules` and reinstall: `rm -rf node_modules && npm install`
-2. Clear Next.js cache: `rm -rf .next`
-3. Check Node.js version: `node --version` (should be 18+)
-
 ### Snapshot IDs Not Found
 
 **Problem**: "Snapshot not found" errors
@@ -379,15 +361,6 @@ iceberg_explorer/
 3. Check backend logs for Avro parsing errors
 4. Ensure `fastavro` is installed: `pip install fastavro`
 
-### PyIceberg Catalog Errors
-
-**Problem**: "Failed to load catalog" errors
-
-**Solutions**:
-1. These errors are non-fatal - the system falls back to manual parsing
-2. The application works without PyIceberg catalog (uses fastavro instead)
-3. You can ignore these warnings in the logs
-
 ## Development
 
 ### Running in Development Mode
@@ -403,56 +376,9 @@ Both servers support hot-reload:
 2. **Frontend**: Add components in `components/`
 3. **Types**: Update `types/index.ts` for new data structures
 
-### Testing
-
-```bash
-# Backend API documentation
-open http://localhost:8000/docs
-
-# Test API endpoints
-curl http://localhost:8000/projects
-curl http://localhost:8000/buckets?project_id=YOUR_PROJECT_ID
-```
-
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCS service account JSON key | No* |
-| `PORT` | Backend server port (default: 8000) | No |
-| `NEXT_PUBLIC_API_URL` | Backend API URL (default: http://localhost:8000) | No |
-
-*Not required if using `gcloud auth login` (Application Default Credentials)
-
-## Performance Notes
-
-- **Large Tables**: Tables with thousands of files may take time to analyze
-- **Sample Data**: Only reads from first 3 Parquet files by default
-- **Snapshot Comparison**: Can be slow for snapshots with many files
-- **Caching**: Consider implementing caching for frequently accessed tables
-
-## Security Considerations
-
-- Never commit service account keys to version control
-- Use IAM roles with least privilege principle
-- Consider using Workload Identity for production deployments
-- The application only reads data - it does not modify Iceberg tables
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
 ## License
 
 MIT License - see LICENSE file for details
-
-## Support
-
-For issues, questions, or contributions, please open an issue on GitHub.
 
 ---
 

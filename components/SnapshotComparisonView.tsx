@@ -18,24 +18,31 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
   const [snapshot2Id, setSnapshot2Id] = useState<string | null>(null);
 
   useEffect(() => {
-    if (metadata && metadata.snapshots && metadata.snapshots.length >= 2) {
-      // Default to comparing first two snapshots
+    if (metadata && metadata.snapshots && metadata.snapshots.length > 0) {
+    // Default to comparing first two snapshots, or just the first one if only 1 exists
       const sortedSnapshots = [...metadata.snapshots].sort((a, b) => 
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       );
-      setSnapshot1Id(sortedSnapshots[1]?.snapshotId?.toString() || null);
-      setSnapshot2Id(sortedSnapshots[0]?.snapshotId?.toString() || null);
+
+      if (sortedSnapshots.length >= 2) {
+        setSnapshot1Id(sortedSnapshots[1]?.snapshotId?.toString() || null);
+        setSnapshot2Id(sortedSnapshots[0]?.snapshotId?.toString() || null);
+      } else if (sortedSnapshots.length === 1) {
+        setSnapshot1Id(null); // Compare against nothing (empty state)
+        setSnapshot2Id(sortedSnapshots[0]?.snapshotId?.toString() || null);
+      }
     }
   }, [metadata]);
 
   useEffect(() => {
-    if (snapshot1Id && snapshot2Id && snapshot1Id !== snapshot2Id) {
+    // Allow loading if snapshot2Id is selected (snapshot1Id can be null)
+    if (snapshot2Id && snapshot1Id !== snapshot2Id) {
       loadComparison();
     }
   }, [snapshot1Id, snapshot2Id]);
 
   const loadComparison = async () => {
-    if (!snapshot1Id || !snapshot2Id) return;
+    if (!snapshot2Id) return;
     
     try {
       setLoading(true);
@@ -49,7 +56,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
       } = {
         bucket: tableInfo.bucket,
         path: tableInfo.path,
-        snapshot_id_1: snapshot1Id,
+        snapshot_id_1: snapshot1Id || '',
         snapshot_id_2: snapshot2Id,
       };
       if (tableInfo.projectId) {
@@ -101,10 +108,10 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
     );
   }
 
-  if (!metadata || !metadata.snapshots || metadata.snapshots.length < 2) {
+  if (!metadata || !metadata.snapshots || metadata.snapshots.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-        Need at least 2 snapshots to compare
+        No snapshots available
       </div>
     );
   }
@@ -119,6 +126,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
             onChange={(e) => setSnapshot1Id(e.target.value || null)}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800"
           >
+            <option value="">(None - Start of History)</option>
             {metadata.snapshots.map((snapshot) => (
               <option key={snapshot.snapshotId} value={snapshot.snapshotId.toString()}>
                 {snapshot.snapshotId} - {new Date(snapshot.timestamp).toLocaleString()}

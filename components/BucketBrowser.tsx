@@ -291,7 +291,7 @@ export default function BucketBrowser({
               {error}
             </div>
           ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
+                <div className="space-y-2">
               {!currentProject ? (
                 <p className="text-gray-500 dark:text-gray-400 text-center py-4">
                   Please select a GCP project first.
@@ -319,23 +319,25 @@ export default function BucketBrowser({
         </div>
       ) : (
         <div>
-          <div className="flex items-center gap-2 mb-4">
-            {currentPath && (
-              <button
-                onClick={navigateUp}
-                className="px-3 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded text-sm"
-              >
-                ← Up
-              </button>
-            )}
-            <div className="flex-1 text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium">{selectedBucket}</span>
-              {currentPath && <span> / {currentPath}</span>}
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                {currentPath && (
+                  <button
+                    onClick={navigateUp}
+                    className="px-3 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded text-sm flex-shrink-0"
+                  >
+                    ← Up
+                  </button>
+                )}
+                <div className="flex-1 text-sm text-gray-600 dark:text-gray-400 min-w-0 break-all">
+                  <span className="font-medium">{selectedBucket}</span>
+                  {currentPath && <span> / {currentPath}</span>}
+                </div>
             </div>
             <button
               onClick={handleDiscoverTables}
               disabled={discovering || !selectedBucket}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2"
             >
               {discovering ? (
                 <>
@@ -371,7 +373,7 @@ export default function BucketBrowser({
               {error}
             </div>
           ) : (
-            <div className="space-y-4 max-h-96 overflow-y-auto">
+                  <div className="space-y-4">
               {showDiscovered && discoveredTables.length > 0 && (
                 <div className="mb-4 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
                   <div className="flex items-center justify-between mb-3">
