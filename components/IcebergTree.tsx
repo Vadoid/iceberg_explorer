@@ -46,6 +46,7 @@ interface TreeNode {
   width?: number;
   height?: number;
   parentId?: string;
+  isHistorical?: boolean;
 }
 
 interface IcebergTreeProps {
@@ -64,6 +65,7 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [dragging, setDragging] = useState(false);
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 });
+  const [showHistory, setShowHistory] = useState(false);
 
   // Build the tree structure from flat data
   const rootNode = useMemo(() => {
@@ -79,82 +81,114 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
 
     // Metadata Layer (Latest only for now, or all if we want history)
     // To match the diagram "Table -> Metadata", we usually show the current one.
+    // Metadata Layer
     if (data.metadataFiles && data.metadataFiles.length > 0) {
       const sortedMeta = [...data.metadataFiles].sort((a, b) => b.version - a.version);
-      const latestMeta = sortedMeta[0];
-      
-      const metaNode: TreeNode = {
-        id: `meta-${latestMeta.version}`,
-        type: 'metadata',
-        label: `v${latestMeta.version}.metadata.json`,
-        subLabel: 'Metadata',
-        children: []
-      };
-      root.children?.push(metaNode);
 
-      // Snapshots
-      if (data.snapshots && data.snapshots.length > 0) {
-        const sortedSnapshots = [...data.snapshots].sort((a, b) => {
-             const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-             const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-             return tA - tB; // Ascending s0, s1...
-        });
+      // Determine which metadata files to show
+      const metadataToShow = showHistory ? sortedMeta : [sortedMeta[0]];
 
-        sortedSnapshots.forEach((snap, idx) => {
-          const snapNode: TreeNode = {
-            id: `snap-${snap.snapshotId}`,
-            type: 'snapshot',
-            label: `s${idx}`,
-            subLabel: snap.timestamp ? new Date(snap.timestamp).toLocaleTimeString() : '',
-            children: []
-          };
-          metaNode.children?.push(snapNode);
+      metadataToShow.forEach((metaFile) => {
+        const isLatest = metaFile.version === sortedMeta[0].version;
 
-          // Manifest List
-          if (snap.manifestList) {
-            const mlNode: TreeNode = {
-              id: `ml-${snap.snapshotId}`,
-              type: 'manifest-list',
-              label: 'Manifest List',
-              subLabel: `snap-${snap.snapshotId}-...avro`,
+        const metaNode: TreeNode = {
+          id: `meta-${metaFile.version}`,
+          type: 'metadata',
+          label: `v${metaFile.version}.metadata.json`,
+          subLabel: new Date(metaFile.timestamp).toLocaleDateString(),
+          children: [],
+          isHistorical: !isLatest
+        };
+        root.children?.push(metaNode);
+
+        // Determine which snapshots to show for this metadata file
+        let snapshotsForThisMetadata: typeof data.snapshots = [];
+
+        if (isLatest) {
+          // Show all snapshots for latest (as they are usually the full history)
+          snapshotsForThisMetadata = data.snapshots;
+        } else if (metaFile.currentSnapshotId) {
+          // For historical metadata, we only want to show the snapshot tree reachable from its currentSnapshotId
+          // We need to traverse parentId backwards from currentSnapshotId
+          const relevantSnapshotIds = new Set<string>();
+          let currentId: string | null | undefined = metaFile.currentSnapshotId;
+
+          // Safety check to prevent infinite loops
+          let iterations = 0;
+          while (currentId && iterations < 1000) {
+            relevantSnapshotIds.add(currentId);
+            const snap = data.snapshots.find(s => s.snapshotId === currentId);
+            currentId = snap?.parentId;
+            if (!snap) break;
+            iterations++;
+          }
+
+          snapshotsForThisMetadata = data.snapshots.filter(s => relevantSnapshotIds.has(s.snapshotId));
+        }
+
+        if (snapshotsForThisMetadata && snapshotsForThisMetadata.length > 0) {
+          const sortedSnapshots = [...snapshotsForThisMetadata].sort((a, b) => {
+            const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return tA - tB; // Ascending s0, s1...
+          });
+
+          sortedSnapshots.forEach((snap, idx) => {
+            const snapNode: TreeNode = {
+              id: `snap-${metaFile.version}-${snap.snapshotId}`, // Unique ID per metadata branch
+              type: 'snapshot',
+              label: `s${snap.snapshotId.substring(0, 4)}...`,
+              subLabel: snap.timestamp ? new Date(snap.timestamp).toLocaleTimeString() : '',
               children: []
             };
-            snapNode.children?.push(mlNode);
+            metaNode.children?.push(snapNode);
 
-            // Manifests
-            if (snap.manifests) {
-              snap.manifests.forEach((m, mIdx) => {
-                const mNode: TreeNode = {
-                  id: `m-${snap.snapshotId}-${mIdx}`,
-                  type: 'manifest',
-                  label: `Manifest ${mIdx}`,
-                  subLabel: m.path.split('/').pop()?.substring(0, 15) + '...',
-                  children: []
-                };
-                mlNode.children?.push(mNode);
+            // Manifest List
+            if (snap.manifestList) {
+              const mlNode: TreeNode = {
+                id: `ml-${metaFile.version}-${snap.snapshotId}`,
+                type: 'manifest-list',
+                label: 'Manifest List',
+                subLabel: `...avro`,
+                children: []
+              };
+              snapNode.children?.push(mlNode);
 
-                // Data Files
-                if (m.dataFiles) {
-                  m.dataFiles.forEach((df, dfIdx) => {
-                    const dfNode: TreeNode = {
-                      id: `df-${snap.snapshotId}-${mIdx}-${dfIdx}`,
-                      type: 'data-file',
-                      label: 'Data File',
-                      subLabel: df.path.split('/').pop()?.substring(0, 15) + '...',
-                      children: []
-                    };
-                    mNode.children?.push(dfNode);
-                  });
-                }
-              });
+              // Manifests
+              if (snap.manifests) {
+                snap.manifests.forEach((m, mIdx) => {
+                  const mNode: TreeNode = {
+                    id: `m-${metaFile.version}-${snap.snapshotId}-${mIdx}`,
+                    type: 'manifest',
+                    label: `Manifest ${mIdx}`,
+                    subLabel: m.path.split('/').pop()?.substring(0, 15) + '...',
+                    children: []
+                  };
+                  mlNode.children?.push(mNode);
+
+                  // Data Files
+                  if (m.dataFiles) {
+                    m.dataFiles.forEach((df, dfIdx) => {
+                      const dfNode: TreeNode = {
+                        id: `df-${metaFile.version}-${snap.snapshotId}-${mIdx}-${dfIdx}`,
+                        type: 'data-file',
+                        label: 'Data File',
+                        subLabel: df.path.split('/').pop()?.substring(0, 15) + '...',
+                        children: []
+                      };
+                      mNode.children?.push(dfNode);
+                    });
+                  }
+                });
+              }
             }
-          }
-        });
-      }
+          });
+        }
+      });
     }
 
     return root;
-  }, [data]);
+  }, [data, showHistory]);
 
   // Calculate layout
   const layoutNodes = useMemo(() => {
@@ -289,6 +323,14 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
           </g>
         );
       case 'metadata':
+        if (node.isHistorical) {
+          return (
+            <g>
+              <rect x="0" y="0" width="180" height="60" rx="4" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="2" strokeDasharray="4 2" />
+              <path d="M140,0 L180,40 L180,60 L140,60 Z" fill="#E2E8F0" />
+            </g>
+          );
+        }
         return (
           <g>
             <rect x="0" y="0" width="180" height="60" rx="4" fill="#F0FDF4" stroke="#22C55E" strokeWidth="2" />
@@ -332,6 +374,13 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
     >
       {/* Controls */}
       <div className="absolute top-4 right-4 flex gap-2 z-10">
+        <button
+          onClick={() => setShowHistory(!showHistory)}
+          className={`p-2 rounded shadow text-xs font-medium transition-colors ${showHistory ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-white hover:bg-slate-50'}`}
+        >
+          {showHistory ? 'Hide History' : 'Show History'}
+        </button>
+        <div className="w-px h-8 bg-slate-200 mx-1" />
         <button onClick={expandAll} className="p-2 bg-white rounded shadow hover:bg-slate-50 text-xs font-medium">Expand All</button>
         <button onClick={collapseAll} className="p-2 bg-white rounded shadow hover:bg-slate-50 text-xs font-medium">Collapse All</button>
         <div className="w-px h-8 bg-slate-200 mx-1" />
