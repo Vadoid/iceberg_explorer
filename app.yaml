@@ -1,0 +1,16 @@
+runtime: nodejs18
+
+instance_class: F1
+
+env_variables:
+  # These will be overridden by the deploy step in GitHub Actions
+  NEXT_PUBLIC_API_URL: "https://YOUR_PROJECT_ID.uc.r.appspot.com"
+  NEXTAUTH_URL: "https://YOUR_PROJECT_ID.uc.r.appspot.com"
+  NEXTAUTH_SECRET: "changeme"
+  GOOGLE_CLIENT_ID: "changeme"
+  GOOGLE_CLIENT_SECRET: "changeme"
+
+handlers:
+  - url: /.*
+    script: auto
+    secure: always
