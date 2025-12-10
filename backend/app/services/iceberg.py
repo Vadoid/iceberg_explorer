@@ -457,6 +457,11 @@ def analyze_with_pyiceberg_metadata(bucket: str, path: str, project_id: Optional
             properties = {}
             if token:
                 properties["gcs.oauth2.token"] = token
+                # Set expiration to 1 hour from now (in milliseconds)
+                # PyArrow GcsFileSystem requires both token and expiration
+                import time
+                expiration_ms = int((time.time() + 3600) * 1000)
+                properties["gcs.oauth2.token-expires-at"] = str(expiration_ms)
                 
             print(f"Loading StaticTable from metadata: {full_metadata_location}")
             table = StaticTable.from_metadata(full_metadata_location, properties=properties)
