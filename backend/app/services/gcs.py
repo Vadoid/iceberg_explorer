@@ -36,14 +36,27 @@ def get_storage_client(project_id: Optional[str] = None, token: Optional[str] = 
     return storage.Client()
 
 
-def get_resource_manager_client():
+def get_resource_manager_client(token: Optional[str] = None):
     """Get Resource Manager client for listing projects"""
     try:
+        # 1. Try Bearer Token (User-Centric)
+        if token:
+            try:
+                from google.oauth2.credentials import Credentials
+                creds = Credentials(token=token)
+                return resourcemanager_v3.ProjectsClient(credentials=creds)
+            except Exception as e:
+                print(f"Error creating RM client from token: {e}")
+                pass
+
+        # 2. Try environment variable
         credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
         if credentials_path and os.path.exists(credentials_path):
             from google.oauth2 import service_account
             credentials = service_account.Credentials.from_service_account_file(credentials_path)
             return resourcemanager_v3.ProjectsClient(credentials=credentials)
+            
+        # 3. Use Application Default Credentials (ADC)
         return resourcemanager_v3.ProjectsClient()
     except Exception:
         # If Resource Manager API is not available, return None

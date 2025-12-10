@@ -15,7 +15,7 @@ async def list_projects(token: Optional[str] = Depends(get_current_user_token)):
     
     # Try Resource Manager API first
     try:
-        client = get_resource_manager_client()
+        client = get_resource_manager_client(token=token)
         if client is not None:
             # Use search_projects instead of list_projects to avoid parent requirement
             # search_projects can list all accessible projects without requiring a parent
