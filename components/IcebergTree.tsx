@@ -366,26 +366,29 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
 
   return (
     <div
-      className={`relative w-full h-full overflow-hidden bg-slate-50 ${className}`}
+      className={`relative w-full h-full overflow-hidden bg-slate-50 text-slate-900 ${className}`}
       style={{
         backgroundImage: 'linear-gradient(#e2e8f0 1px, transparent 1px), linear-gradient(90deg, #e2e8f0 1px, transparent 1px)',
         backgroundSize: '20px 20px'
       }}
     >
       {/* Controls */}
-      <div className="absolute top-4 right-4 flex gap-2 z-10">
+      <div className="absolute top-4 right-4 flex gap-2 z-50">
         <button
           onClick={() => setShowHistory(!showHistory)}
-          className={`p-2 rounded shadow text-xs font-medium transition-colors ${showHistory ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-white hover:bg-slate-50'}`}
+          className={`p-2 rounded shadow text-xs font-medium transition-colors border ${showHistory
+              ? 'bg-blue-100 text-blue-700 border-blue-200'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
         >
           {showHistory ? 'Hide History' : 'Show History'}
         </button>
-        <div className="w-px h-8 bg-slate-200 mx-1" />
-        <button onClick={expandAll} className="p-2 bg-white rounded shadow hover:bg-slate-50 text-xs font-medium">Expand All</button>
-        <button onClick={collapseAll} className="p-2 bg-white rounded shadow hover:bg-slate-50 text-xs font-medium">Collapse All</button>
-        <div className="w-px h-8 bg-slate-200 mx-1" />
-        <button onClick={() => setTransform(t => ({ ...t, scale: t.scale * 1.2 }))} className="p-2 bg-white rounded shadow hover:bg-slate-50"><ZoomIn size={16} /></button>
-        <button onClick={() => setTransform(t => ({ ...t, scale: t.scale / 1.2 }))} className="p-2 bg-white rounded shadow hover:bg-slate-50"><ZoomOut size={16} /></button>
+        <div className="w-px h-8 bg-slate-300 mx-1" />
+        <button onClick={expandAll} className="p-2 bg-white text-slate-700 border border-slate-200 rounded shadow hover:bg-slate-50 text-xs font-medium">Expand All</button>
+        <button onClick={collapseAll} className="p-2 bg-white text-slate-700 border border-slate-200 rounded shadow hover:bg-slate-50 text-xs font-medium">Collapse All</button>
+        <div className="w-px h-8 bg-slate-300 mx-1" />
+        <button onClick={() => setTransform(t => ({ ...t, scale: t.scale * 1.2 }))} className="p-2 bg-white text-slate-700 border border-slate-200 rounded shadow hover:bg-slate-50"><ZoomIn size={16} /></button>
+        <button onClick={() => setTransform(t => ({ ...t, scale: t.scale / 1.2 }))} className="p-2 bg-white text-slate-700 border border-slate-200 rounded shadow hover:bg-slate-50"><ZoomOut size={16} /></button>
       </div>
 
       <svg 
