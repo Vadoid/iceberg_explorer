@@ -14,3 +14,7 @@ handlers:
   - url: /.*
     script: auto
     secure: always
+
+automatic_scaling:
+  max_instances: 10
+  min_instances: 0
