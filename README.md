@@ -14,11 +14,12 @@ A comprehensive, user-friendly web interface for exploring and analyzing Apache 
 - 🔄 **Snapshot Comparison**: Compare snapshots to see what changed (like GitHub diff)
 - 🎯 **Table Discovery**: Automatically discover all Iceberg tables in a bucket
 - 📱 **Responsive UI**: Modern, user-friendly interface that works on all devices
-- 🔐 **GCS Integration**: Seamless connection to Google Cloud Storage
+- 🔐 **Secure Authentication**: Google Sign-In integration with profile management
+- ☁️ **GCS Integration**: Seamless connection to Google Cloud Storage
 
 ## Prerequisites
 
-- **Node.js** 18+ and npm
+- **Node.js** 22+ and npm
 - **Python** 3.9+ (Python 3.11+ recommended)
 - **Google Cloud SDK** (gcloud CLI) - for authentication
 - **Access to GCS buckets** containing Iceberg tables
@@ -153,85 +154,30 @@ npm run dev
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs (Swagger UI)
 
-## Usage Guide
+## Deployment
 
-### 1. Select a GCP Project
+### App Engine (Standard Environment)
 
-- On the main page, you'll see a project selector
-- Choose a project from the dropdown, or enter a project ID manually
-- Buckets will automatically refresh based on the selected project
+The application is configured for deployment to Google App Engine (Node.js 22 runtime).
 
-### 2. Browse GCS Buckets
+1. **Prerequisites**:
+   - Google Cloud Project with App Engine enabled
+   - GitHub Repository with this code
 
-- Select a bucket from the list
-- Navigate through folders by clicking on them
-- Iceberg tables are automatically detected and marked with a special icon
+2. **Configuration**:
+   - `app.yaml`: Configures the App Engine runtime and scaling settings.
+   - `.github/workflows/deploy.yml`: GitHub Actions workflow for automated deployment.
 
-### 3. Discover Iceberg Tables
-
-- Click the **"Discover Iceberg Tables"** button to scan the entire bucket
-- The system will find all `*.metadata.json` files and list discovered tables
-- Click on any discovered table to analyze it
-
-### 4. Analyze a Table
-
-Click on an Iceberg table to view detailed analysis with multiple tabs:
-
-#### Overview Tab
-- Table metadata (format version, location, UUID)
-- Current snapshot information
-- Table properties
-
-#### Architecture Tab
-- **Interactive Graph**: Visualizes the relationship between Metadata, Snapshots, Manifest Lists, Manifests, and Data Files
-- **Custom SVG Layout**: Pixel-perfect representation of the Iceberg spec
-- **Zoom & Pan**: Explore large table structures easily
-
-#### Schema Tab
-- Complete schema with field types, IDs, and documentation
-- Field hierarchy and relationships
-
-#### Partitions Tab
-- Partition specification details
-- Partition statistics with visualizations
-- File distribution across partitions
-
-#### Statistics Tab
-- Overall table statistics (total files, records, size)
-- Per-snapshot statistics with delta information
-- Visual charts and graphs
-
-#### Sample Data Tab
-- View sample rows from the table
-- Select a specific snapshot to view data from that point in time
-- Configurable row limit (default: 100 rows)
-
-#### Snapshots Tab
-- Compare any two snapshots side-by-side
-- See added, removed, and modified files
-- View statistics delta (like GitHub diff)
-- Color-coded changes (green=added, red=removed, yellow=modified)
-
-## API Endpoints
-
-The backend provides the following REST API endpoints:
-
-### Project & Bucket Management
-
-- `GET /projects` - List all accessible GCP projects
-- `GET /buckets?project_id={id}` - List buckets in a project
-- `GET /browse?bucket={name}&path={path}&project_id={id}` - Browse bucket contents
-
-### Table Analysis
-
-- `GET /analyze?bucket={name}&path={path}&project_id={id}` - Analyze Iceberg table metadata
-- `GET /analyze/snapshot?bucket={name}&path={path}&snapshot_id={id}&project_id={id}` - Get specific snapshot data
-- `GET /sample?bucket={name}&path={path}&limit={n}&snapshot_id={id}&project_id={id}` - Get sample data
-- `GET /snapshot/compare?bucket={name}&path={path}&snapshot_id_1={id1}&snapshot_id_2={id2}&project_id={id}` - Compare two snapshots
-
-### Table Discovery
-
-- `GET /discover?bucket={name}&project_id={id}` - Discover all Iceberg tables in a bucket
+3. **Secrets**:
+   Configure the following secrets in your GitHub Repository:
+   - `GCP_PROJECT_ID`: Your Google Cloud Project ID
+   - `WIF_PROVIDER`: Workload Identity Federation Provider
+   - `WIF_SERVICE_ACCOUNT`: Service Account for deployment
+   - `NEXT_PUBLIC_API_URL`: URL of your deployed backend
+   - `NEXTAUTH_URL`: URL of your deployed frontend
+   - `NEXTAUTH_SECRET`: Random string for NextAuth
+   - `GOOGLE_CLIENT_ID`: Google OAuth Client ID
+   - `GOOGLE_CLIENT_SECRET`: Google OAuth Client Secret
 
 ## Project Structure
 
@@ -239,31 +185,25 @@ The backend provides the following REST API endpoints:
 iceberg_explorer/
 ├── app/                          # Next.js app directory
 │   ├── page.tsx                  # Main page component
-│   ├── layout.tsx                # Root layout
-│   ├── globals.css               # Global styles
-│   └── api/                      # API proxy routes
-│       └── backend/[...path]/    # Backend API proxy
+│   ├── login/                    # Login page
+│   ├── api/                      # API proxy routes
+│   └── ...
 ├── components/                    # React components
-│   ├── BucketBrowser.tsx         # GCS bucket navigation
-│   ├── TableAnalyzer.tsx         # Main table analysis component
-│   ├── IcebergGraphView.tsx      # Graph view container
+│   ├── ProfileButton.tsx         # User profile & logout
 │   ├── IcebergTree.tsx           # Custom SVG architecture visualization
-│   ├── MetadataView.tsx          # Table metadata display
-│   ├── SchemaView.tsx            # Schema information
-│   ├── PartitionView.tsx         # Partition analysis with charts
-│   ├── StatsView.tsx             # Statistics and visualizations
-│   ├── SampleDataView.tsx        # Sample data viewer
-│   └── SnapshotComparisonView.tsx # Snapshot comparison UI
-├── types/                         # TypeScript type definitions
-│   └── index.ts                  # All type definitions
+│   └── ...
 ├── backend/                       # Python FastAPI backend
-│   ├── main.py                   # API server and business logic
+│   ├── app/
+│   │   ├── core/                 # Core functionality (security, config)
+│   │   ├── routers/              # API routers (projects, buckets, analyze)
+│   │   └── services/             # Business logic (gcs, iceberg)
+│   ├── main.py                   # Application entry point
 │   └── requirements.txt          # Python dependencies
+├── .github/workflows/            # CI/CD workflows
 ├── .venv/                         # Python virtual environment (gitignored)
 ├── start.sh                      # Startup script
 ├── package.json                  # Node.js dependencies
-├── tsconfig.json                 # TypeScript configuration
-├── tailwind.config.js           # Tailwind CSS configuration
+├── app.yaml                      # App Engine configuration
 └── README.md                     # This file
 ```
 
@@ -306,14 +246,6 @@ iceberg_explorer/
    # Check if ADC file exists
    ls ~/.config/gcloud/application_default_credentials.json
    ```
-3. If using service account, verify `GOOGLE_APPLICATION_CREDENTIALS` is set:
-   ```bash
-   echo $GOOGLE_APPLICATION_CREDENTIALS
-   ```
-4. Check your project permissions - you need:
-   - `storage.buckets.list` (to list buckets)
-   - `storage.objects.get` (to read files)
-   - `resourcemanager.projects.list` (to list projects)
 
 ### Backend Won't Start
 
@@ -324,7 +256,6 @@ iceberg_explorer/
    ```bash
    ./start.sh
    ```
-   The script will kill any existing process on port 8000.
 
 2. **Manually kill the process**:
    ```bash
@@ -333,48 +264,6 @@ iceberg_explorer/
    # Kill it (replace PID with the actual process ID)
    kill -9 <PID>
    ```
-
-3. **Use a different port** (if you want to keep the existing process):
-   ```bash
-   # Start backend on port 8001
-   cd backend
-   uvicorn main:app --host 0.0.0.0 --port 8001 --reload
-   ```
-   Then update `next.config.js` to proxy to port 8001 instead of 8000.
-
-### Snapshot IDs Not Found
-
-**Problem**: "Snapshot not found" errors
-
-**Solutions**:
-1. This is usually a precision issue with large integers
-2. Make sure you're using the latest code (snapshot IDs are now strings)
-3. Restart both backend and frontend servers
-
-### No Data Files Found
-
-**Problem**: Table shows 0 data files
-
-**Solutions**:
-1. Check that the table has snapshots (current-snapshot-id != -1)
-2. Verify the metadata file is the latest version
-3. Check backend logs for Avro parsing errors
-4. Ensure `fastavro` is installed: `pip install fastavro`
-
-## Development
-
-### Running in Development Mode
-
-Both servers support hot-reload:
-
-- **Backend**: Automatically reloads on file changes (uvicorn --reload)
-- **Frontend**: Next.js Fast Refresh enabled
-
-### Adding New Features
-
-1. **Backend**: Add endpoints in `backend/main.py`
-2. **Frontend**: Add components in `components/`
-3. **Types**: Update `types/index.ts` for new data structures
 
 ## License
 
