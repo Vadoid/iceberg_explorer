@@ -6,11 +6,13 @@ import PartitionView from '../components/PartitionView'
 import StatsView from '../components/StatsView'
 import SampleDataView from '../components/SampleDataView'
 import SnapshotComparisonView from '../components/SnapshotComparisonView'
-import axios from 'axios'
+import api from '../lib/api'
 
-// Mock axios
-jest.mock('axios')
-const mockedAxios = axios as jest.Mocked<typeof axios>
+// Mock api client
+jest.mock('../lib/api', () => ({
+  get: jest.fn(),
+}))
+const mockedApi = api as jest.Mocked<typeof api>
 
 const mockMetadata = {
   tableName: 'test_table',
@@ -105,7 +107,7 @@ describe('Views', () => {
       const mockData = [
         { id: 1, data: 'test' }
       ]
-      mockedAxios.get.mockResolvedValue({
+      mockedApi.get.mockResolvedValue({
         data: {
           rows: mockData,
           columns: ['id', 'data'],
@@ -125,7 +127,7 @@ describe('Views', () => {
   describe('SnapshotComparisonView', () => {
     it('renders snapshot comparison', async () => {
       // Mock comparison response
-      mockedAxios.get.mockResolvedValue({
+      mockedApi.get.mockResolvedValue({
         data: {
           snapshot1: mockMetadata.snapshots[0],
           snapshot2: mockMetadata.snapshots[0],

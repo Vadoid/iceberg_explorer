@@ -1,11 +1,13 @@
 import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import IcebergGraphView from '../components/IcebergGraphView'
-import axios from 'axios'
+import api from '../lib/api'
 
-// Mock axios
-jest.mock('axios')
-const mockedAxios = axios as jest.Mocked<typeof axios>
+// Mock api client
+jest.mock('../lib/api', () => ({
+  get: jest.fn(),
+}))
+const mockedApi = api as jest.Mocked<typeof api>
 
 // Mock cytoscape since it requires a real DOM with layout capabilities
 jest.mock('cytoscape', () => {
@@ -40,7 +42,7 @@ const mockGraphData = {
 describe('IcebergGraphView', () => {
   it('renders and fetches data', async () => {
     // Setup mock response
-    mockedAxios.get.mockResolvedValue({ data: mockGraphData })
+    (mockedApi.get as jest.Mock).mockResolvedValue({ data: mockGraphData })
 
     render(<IcebergGraphView tableInfo={mockTableInfo} />)
 
