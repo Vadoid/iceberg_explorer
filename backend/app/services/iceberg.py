@@ -453,8 +453,13 @@ def analyze_with_pyiceberg_metadata(bucket: str, path: str, project_id: Optional
             else:
                 full_metadata_location = metadata_location
                 
+            # Prepare properties with token if available
+            properties = {}
+            if token:
+                properties["gcs.oauth2.token"] = token
+                
             print(f"Loading StaticTable from metadata: {full_metadata_location}")
-            table = StaticTable.from_metadata(full_metadata_location)
+            table = StaticTable.from_metadata(full_metadata_location, properties=properties)
             
             # Extract namespace and table name from path
             table_name = normalized_path.split("/")[-1] if "/" in normalized_path else normalized_path
