@@ -3,13 +3,6 @@ runtime: nodejs22
 
 instance_class: F1
 
-skip_files:
-  - ^backend/.*$
-  - ^\.venv/.*$
-  - ^\.git/.*$
-  - ^\.github/.*$
-  - ^tests/.*$
-
 env_variables:
   # These will be overridden by the deploy step in GitHub Actions
   NEXT_PUBLIC_API_URL: "https://YOUR_PROJECT_ID.uc.r.appspot.com"
@@ -24,5 +17,5 @@ handlers:
     secure: always
 
 automatic_scaling:
-  max_instances: 10
+  max_instances: 20
   min_instances: 0

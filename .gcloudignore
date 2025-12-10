@@ -1,0 +1,24 @@
+# Standard ignores
+.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+node_modules/
+.next/
+out/
+build/
+coverage/
+.env
+.env.local
+.env.*
+
+# Backend files (should be deployed separately via backend/app.yaml)
+backend/
+.venv/
+__pycache__/
+*.pyc
+
+# Tests
+tests/
+__tests__/
