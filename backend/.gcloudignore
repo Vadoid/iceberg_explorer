@@ -1,0 +1,11 @@
+.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+tests/
