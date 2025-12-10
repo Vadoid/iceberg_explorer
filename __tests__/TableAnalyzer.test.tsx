@@ -1,11 +1,18 @@
 import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import TableAnalyzer from '../components/TableAnalyzer'
-import axios from 'axios'
 
-// Mock axios
-jest.mock('axios')
-const mockedAxios = axios as jest.Mocked<typeof axios>
+
+// Mock api client
+jest.mock('../lib/api', () => ({
+  get: jest.fn(),
+  interceptors: {
+    request: { use: jest.fn() },
+    response: { use: jest.fn() }
+  }
+}))
+import api from '../lib/api'
+const mockedApi = api as jest.Mocked<typeof api>
 
 // Mock sub-components
 jest.mock('../components/MetadataView', () => () => <div data-testid="metadata-view">Metadata View</div>)
@@ -47,12 +54,12 @@ const mockMetadata = {
 describe('TableAnalyzer', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockedAxios.get.mockResolvedValue({ data: mockMetadata })
+    mockedApi.get.mockResolvedValue({ data: mockMetadata })
   })
 
   it('renders loading state initially', async () => {
     // Delay resolution to catch loading state
-    mockedAxios.get.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ data: mockMetadata }), 100)))
+    mockedApi.get.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ data: mockMetadata }), 100)))
 
     render(<TableAnalyzer tableInfo={mockTableInfo} />)
 
@@ -85,7 +92,7 @@ describe('TableAnalyzer', () => {
   })
 
   it('handles error state', async () => {
-    mockedAxios.get.mockRejectedValue({ response: { data: { detail: 'Failed to load' } } })
+    mockedApi.get.mockRejectedValue({ response: { data: { detail: 'Failed to load' } } })
     render(<TableAnalyzer tableInfo={mockTableInfo} />)
 
     await waitFor(() => {
@@ -99,14 +106,14 @@ describe('TableAnalyzer', () => {
     await waitFor(() => expect(screen.getByTestId('metadata-view')).toBeInTheDocument())
 
     // Clear mock history
-    mockedAxios.get.mockClear()
-    mockedAxios.get.mockResolvedValue({ data: mockMetadata })
+    mockedApi.get.mockClear()
+    mockedApi.get.mockResolvedValue({ data: mockMetadata })
 
     // Click refresh
     fireEvent.click(screen.getByTitle('Refresh metadata'))
 
     await waitFor(() => {
-      expect(mockedAxios.get).toHaveBeenCalledTimes(1)
+      expect(mockedApi.get).toHaveBeenCalledTimes(1)
     })
   })
 })

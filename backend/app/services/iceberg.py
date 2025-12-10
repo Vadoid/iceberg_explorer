@@ -939,3 +939,325 @@ def analyze_with_pyiceberg_metadata(bucket: str, path: str, project_id: Optional
         import traceback
         print(traceback.format_exc())
         return None
+
+def get_sample_data(bucket: str, path: str, limit: int = 100, project_id: Optional[str] = None, token: Optional[str] = None) -> Dict[str, Any]:
+    """Get sample data from the table using optimized metadata traversal"""
+    empty_result = {
+        "rows": [],
+        "columns": [],
+        "totalRows": 0,
+        "filesRead": 0,
+        "message": "No data found"
+    }
+
+    try:
+        # Optimized approach: Follow metadata -> snapshot -> manifest -> data file
+        # This avoids listing the entire data directory which can be very slow
+        
+        # 1. Get metadata
+        try:
+            metadata_dict, _, _ = read_iceberg_metadata_manual(bucket, path, project_id, token)
+            
+            # 2. Get current snapshot
+            current_snapshot_id = metadata_dict.get("current-snapshot-id")
+            snapshots = metadata_dict.get("snapshots", [])
+            current_snapshot = next((s for s in snapshots if s.get("snapshot-id") == current_snapshot_id), None)
+            
+            if current_snapshot:
+                manifest_list = current_snapshot.get("manifest-list")
+                if manifest_list:
+                    client = get_storage_client(project_id=project_id, token=token)
+                    bucket_obj = client.bucket(bucket)
+                    
+                    # Parse manifest list
+                    manifest_list_path = manifest_list.replace(f"gs://{bucket}/", "").lstrip("/")
+                    blob = bucket_obj.blob(manifest_list_path)
+                    content = blob.download_as_bytes()
+                    
+                    manifest_list_data = []
+                    if FASTAVRO_AVAILABLE:
+                        from io import BytesIO
+                        import fastavro
+                        manifest_bytes_io = BytesIO(content)
+                        manifest_list_data = list(fastavro.reader(manifest_bytes_io))
+                    
+                    # 3. Pick first manifest
+                    if manifest_list_data:
+                        first_manifest_entry = manifest_list_data[0]
+                        manifest_path = first_manifest_entry.get("manifest_path")
+                        
+                        if manifest_path:
+                            manifest_path_clean = manifest_path.replace(f"gs://{bucket}/", "").lstrip("/")
+                            blob = bucket_obj.blob(manifest_path_clean)
+                            content = blob.download_as_bytes()
+                            
+                            manifest_data = []
+                            if FASTAVRO_AVAILABLE:
+                                manifest_bytes_io = BytesIO(content)
+                                manifest_data = list(fastavro.reader(manifest_bytes_io))
+                            
+                            # 4. Pick first data file
+                            if manifest_data:
+                                first_entry = manifest_data[0]
+                                data_file = first_entry.get("data_file") or first_entry
+                                file_path = data_file.get("file_path") or data_file.get("filePath")
+                                
+                                if file_path:
+                                    file_path_clean = file_path.replace(f"gs://{bucket}/", "").lstrip("/")
+                                    blob = bucket_obj.blob(file_path_clean)
+                                    
+                                    # Download file (full file for now, assuming parquet files are reasonably sized chunks)
+                                    # For very large files, we might want to use range requests, but Parquet footer is at the end.
+                                    content = blob.download_as_bytes()
+                                    
+                                    import pandas as pd
+                                    from io import BytesIO
+                                    df = pd.read_parquet(BytesIO(content))
+                                    
+                                    # Limit and convert
+                                    df_head = df.head(limit)
+                                    
+                                    # Handle timestamps
+                                    for col in df_head.columns:
+                                        if pd.api.types.is_datetime64_any_dtype(df_head[col]):
+                                            df_head[col] = df_head[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                                    
+                                    rows = df_head.to_dict(orient='records')
+                                    columns = list(df_head.columns)
+                                    
+                                    return {
+                                        "rows": rows,
+                                        "columns": columns,
+                                        "totalRows": len(rows),
+                                        "filesRead": 1,
+                                        "message": None
+                                    }
+        except Exception as e:
+            print(f"Optimized sample fetch failed: {e}")
+            # Fall through to fallback methods
+        
+        # Fallback 1: PyIceberg (if optimized failed)
+        if PYICEBERG_AVAILABLE:
+            try:
+                normalized_path = path.strip("/")
+                metadata_dict, metadata_location, _ = read_iceberg_metadata_manual(bucket, path, project_id, token)
+                
+                if not metadata_location.startswith("gs://"):
+                    full_metadata_location = f"gs://{bucket}/{metadata_location}"
+                else:
+                    full_metadata_location = metadata_location
+                
+                table = StaticTable.from_metadata(full_metadata_location)
+                scan = table.scan(limit=limit)
+                arrow_table = scan.to_arrow()
+                pydict = arrow_table.to_pydict()
+                
+                rows = []
+                columns = []
+                if pydict:
+                    keys = list(pydict.keys())
+                    columns = keys
+                    num_rows = len(pydict[keys[0]])
+                    for i in range(min(num_rows, limit)):
+                        row = {}
+                        for key in keys:
+                            val = pydict[key][i]
+                            if hasattr(val, 'isoformat'):
+                                val = val.isoformat()
+                            elif isinstance(val, bytes):
+                                try:
+                                    val = val.decode('utf-8')
+                                except:
+                                    val = str(val)
+                            row[key] = val
+                        rows.append(row)
+                
+                return {
+                    "rows": rows,
+                    "columns": columns,
+                    "totalRows": len(rows),
+                    "filesRead": 1,
+                    "message": None
+                }
+            except Exception as e:
+                print(f"PyIceberg sample failed: {e}")
+
+        # Fallback 2: Manual listing (slowest)
+        try:
+            import pandas as pd
+            client = get_storage_client(project_id=project_id, token=token)
+            bucket_obj = client.bucket(bucket)
+            normalized_path = path.strip("/")
+            
+            prefixes = [f"{normalized_path}/data/", f"{normalized_path}/"]
+            parquet_file = None
+            for prefix in prefixes:
+                blobs = bucket_obj.list_blobs(prefix=prefix, max_results=50)
+                for blob in blobs:
+                    if blob.name.endswith(".parquet"):
+                        parquet_file = blob
+                        break
+                if parquet_file:
+                    break
+            
+            if not parquet_file:
+                return empty_result
+            
+            from io import BytesIO
+            content = parquet_file.download_as_bytes()
+            df = pd.read_parquet(BytesIO(content))
+            df_head = df.head(limit)
+            
+            for col in df_head.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_head[col]):
+                    df_head[col] = df_head[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+            
+            rows = df_head.to_dict(orient='records')
+            columns = list(df_head.columns)
+            
+            return {
+                "rows": rows,
+                "columns": columns,
+                "totalRows": len(rows),
+                "filesRead": 1,
+                "message": None
+            }
+            
+        except ImportError:
+            print("pandas/pyarrow not available for manual sample")
+            return empty_result
+        except Exception as e:
+            print(f"Manual sample failed: {e}")
+            return empty_result
+            
+    except Exception as e:
+        print(f"Get sample data failed: {e}")
+        return empty_result
+
+def compare_snapshots(bucket: str, path: str, snapshot_id_1: str, snapshot_id_2: str, project_id: Optional[str] = None, token: Optional[str] = None) -> Dict[str, Any]:
+    """Compare two snapshots and return the differences"""
+    try:
+        # Get metadata
+        metadata_dict, _, _ = read_iceberg_metadata_manual(bucket, path, project_id, token)
+        
+        snapshots = metadata_dict.get("snapshots", [])
+        
+        # Find the snapshots
+        snap1 = None
+        snap2 = None
+        
+        # Handle empty snapshot_id_1 (start of history)
+        if not snapshot_id_1:
+            snap1 = {
+                "snapshot-id": 0,
+                "timestamp-ms": 0,
+                "summary": {},
+                "manifest-list": ""
+            }
+        
+        for snap in snapshots:
+            sid = str(snap.get("snapshot-id"))
+            if sid == snapshot_id_1:
+                snap1 = snap
+            if sid == snapshot_id_2:
+                snap2 = snap
+        
+        if not snap2:
+            raise ValueError(f"Snapshot {snapshot_id_2} not found")
+        
+        if not snap1 and snapshot_id_1:
+             raise ValueError(f"Snapshot {snapshot_id_1} not found")
+
+        # Get data files for both snapshots
+        files1 = []
+        if snapshot_id_1 and snap1.get("manifest-list"):
+             files1 = get_manifest_files(bucket, path, snap1["manifest-list"], project_id, token)
+        
+        files2 = []
+        if snap2.get("manifest-list"):
+             files2 = get_manifest_files(bucket, path, snap2["manifest-list"], project_id, token)
+             
+        # Create maps for easy comparison
+        files1_map = {f["filePath"]: f for f in files1}
+        files2_map = {f["filePath"]: f for f in files2}
+        
+        added_files = []
+        removed_files = []
+        modified_files = []
+        
+        # Find added and modified files
+        for path2, file2 in files2_map.items():
+            if path2 not in files1_map:
+                added_files.append(file2)
+            else:
+                # Check if modified (e.g. different size or record count, though usually files are immutable)
+                file1 = files1_map[path2]
+                if file1["fileSizeInBytes"] != file2["fileSizeInBytes"] or file1["recordCount"] != file2["recordCount"]:
+                    modified_files.append({
+                        "filePath": path2,
+                        "before": file1,
+                        "after": file2,
+                        "changes": {
+                            "sizeDelta": file2["fileSizeInBytes"] - file1["fileSizeInBytes"],
+                            "recordDelta": file2["recordCount"] - file1["recordCount"]
+                        }
+                    })
+        
+        # Find removed files
+        for path1, file1 in files1_map.items():
+            if path1 not in files2_map:
+                removed_files.append(file1)
+                
+        # Calculate statistics
+        stats1 = {
+            "fileCount": len(files1),
+            "recordCount": sum(f["recordCount"] for f in files1),
+            "totalSize": sum(f["fileSizeInBytes"] for f in files1)
+        }
+        
+        stats2 = {
+            "fileCount": len(files2),
+            "recordCount": sum(f["recordCount"] for f in files2),
+            "totalSize": sum(f["fileSizeInBytes"] for f in files2)
+        }
+        
+        delta = {
+            "files": stats2["fileCount"] - stats1["fileCount"],
+            "records": stats2["recordCount"] - stats1["recordCount"],
+            "size": stats2["totalSize"] - stats1["totalSize"]
+        }
+        
+        # Format snapshots for response
+        def format_snapshot(s):
+            if not s: return None
+            ts = s.get("timestamp-ms", 0)
+            return {
+                "snapshotId": str(s.get("snapshot-id", "")),
+                "timestamp": datetime.fromtimestamp(ts / 1000).isoformat() if ts > 0 else datetime.min.isoformat(),
+                "summary": s.get("summary", {}),
+                "manifestList": s.get("manifest-list", "")
+            }
+
+        return {
+            "snapshot1": format_snapshot(snap1),
+            "snapshot2": format_snapshot(snap2),
+            "addedFiles": added_files,
+            "removedFiles": removed_files,
+            "modifiedFiles": modified_files,
+            "statistics": {
+                "snapshot1": stats1,
+                "snapshot2": stats2,
+                "delta": delta
+            },
+            "summary": {
+                "addedCount": len(added_files),
+                "removedCount": len(removed_files),
+                "modifiedCount": len(modified_files)
+            }
+        }
+
+    except Exception as e:
+        print(f"Compare snapshots failed: {e}")
+        import traceback
+        print(traceback.format_exc())
+        raise e

@@ -1,11 +1,18 @@
 import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import BucketBrowser from '../components/BucketBrowser'
-import axios from 'axios'
 
-// Mock axios
-jest.mock('axios')
-const mockedAxios = axios as jest.Mocked<typeof axios>
+
+// Mock api client
+jest.mock('../lib/api', () => ({
+  get: jest.fn(),
+  interceptors: {
+    request: { use: jest.fn() },
+    response: { use: jest.fn() }
+  }
+}))
+import api from '../lib/api'
+const mockedApi = api as jest.Mocked<typeof api>
 
 const mockProjects = {
   projects: [
@@ -34,11 +41,11 @@ describe('BucketBrowser', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    mockedAxios.get.mockResolvedValue({ data: {} })
+    mockedApi.get.mockResolvedValue({ data: {} })
   })
 
   it('loads and displays projects on mount', async () => {
-    mockedAxios.get.mockResolvedValueOnce({ data: mockProjects })
+    mockedApi.get.mockResolvedValueOnce({ data: mockProjects })
 
     render(
       <BucketBrowser
@@ -54,8 +61,8 @@ describe('BucketBrowser', () => {
   })
 
   it('loads buckets when project is selected', async () => {
-    mockedAxios.get.mockResolvedValueOnce({ data: mockProjects })
-    mockedAxios.get.mockResolvedValueOnce({ data: mockBuckets })
+    mockedApi.get.mockResolvedValueOnce({ data: mockProjects })
+    mockedApi.get.mockResolvedValueOnce({ data: mockBuckets })
 
     render(
       <BucketBrowser
@@ -78,9 +85,9 @@ describe('BucketBrowser', () => {
   })
 
   it('loads folder contents when bucket is selected', async () => {
-    mockedAxios.get.mockResolvedValueOnce({ data: mockProjects })
-    mockedAxios.get.mockResolvedValueOnce({ data: mockBuckets })
-    mockedAxios.get.mockResolvedValueOnce({ data: mockFolderContents })
+    mockedApi.get.mockResolvedValueOnce({ data: mockProjects })
+    mockedApi.get.mockResolvedValueOnce({ data: mockBuckets })
+    mockedApi.get.mockResolvedValueOnce({ data: mockFolderContents })
 
     render(
       <BucketBrowser
@@ -106,9 +113,9 @@ describe('BucketBrowser', () => {
   })
 
   it('calls onTableSelect when an Iceberg table is clicked', async () => {
-    mockedAxios.get.mockResolvedValueOnce({ data: mockProjects })
-    mockedAxios.get.mockResolvedValueOnce({ data: mockBuckets })
-    mockedAxios.get.mockResolvedValueOnce({ data: mockFolderContents })
+    mockedApi.get.mockResolvedValueOnce({ data: mockProjects })
+    mockedApi.get.mockResolvedValueOnce({ data: mockBuckets })
+    mockedApi.get.mockResolvedValueOnce({ data: mockFolderContents })
 
     render(
       <BucketBrowser

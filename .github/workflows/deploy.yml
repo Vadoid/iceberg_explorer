@@ -66,7 +66,7 @@ jobs:
       - name: Deploy to App Engine
         uses: google-github-actions/deploy-appengine@v1
         with:
-          deliverables: app.yaml
+          deliverables: app.yaml backend/app.yaml dispatch.yaml
           project_id: ${{ secrets.GCP_PROJECT_ID }}
           env_vars: |-
             NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}

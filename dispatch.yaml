@@ -1,0 +1,5 @@
+dispatch:
+  - url: "*/api/backend/*"
+    service: backend
+  - url: "*/*"
+    service: default

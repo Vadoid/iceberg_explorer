@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2, Database, FileText, BarChart3, Layers, Table2, GitCompare, RefreshCw, Network } from 'lucide-react';
 import { TableInfo, TableMetadata } from '@/types';
-import axios from 'axios';
+import api from '@/lib/api';
 import MetadataView from './MetadataView';
 import SchemaView from './SchemaView';
 import PartitionView from './PartitionView';
@@ -39,7 +39,7 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
       if (tableInfo.projectId) {
         params.project_id = tableInfo.projectId;
       }
-      const response = await axios.get('/api/backend/analyze', { params });
+      const response = await api.get('/analyze', { params });
       setMetadata(response.data);
     } catch (err) {
       // Extract detailed error message if available

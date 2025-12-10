@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { TableInfo } from '@/types';
-import axios from 'axios';
+import api from '@/lib/api';
 import IcebergTree from './IcebergTree';
 
 interface IcebergGraphViewProps {
@@ -61,8 +61,8 @@ export default function IcebergGraphView({ tableInfo }: IcebergGraphViewProps) {
     setLoading(true);
     setError(null);
     try {
-      // Use the correct API endpoint
-      const response = await axios.get(`http://localhost:8000/analyze`, {
+      // Use the centralized API client
+      const response = await api.get('/analyze', {
         params: {
           bucket: tableInfo.bucket,
           path: tableInfo.path,

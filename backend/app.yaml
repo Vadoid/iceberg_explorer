@@ -1,0 +1,8 @@
+service: backend
+runtime: python311
+instance_class: F1
+entrypoint: uvicorn main:app --host 0.0.0.0 --port $PORT
+
+# Environment variables are passed from GitHub Actions
+env_variables:
+  GOOGLE_CLOUD_PROJECT: "OPTIONAL_DEFAULT"

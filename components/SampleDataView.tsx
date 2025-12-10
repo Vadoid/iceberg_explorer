@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { TableInfo, TableMetadata, SampleData } from '@/types';
-import axios from 'axios';
+import api from '@/lib/api';
 
 interface SampleDataViewProps {
   tableInfo: TableInfo;
@@ -37,7 +37,7 @@ export default function SampleDataView({ tableInfo, metadata }: SampleDataViewPr
       if (selectedSnapshotId) {
         params.snapshot_id = selectedSnapshotId;
       }
-      const response = await axios.get('/api/backend/sample', { params });
+      const response = await api.get('/sample', { params });
       setSampleData(response.data);
     } catch (err) {
       let errorMessage = 'Failed to load sample data.';
@@ -107,7 +107,7 @@ export default function SampleDataView({ tableInfo, metadata }: SampleDataViewPr
         </div>
       </div>
 
-      {sampleData && sampleData.rows.length > 0 ? (
+      {sampleData && sampleData.rows && sampleData.rows.length > 0 ? (
         <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800">

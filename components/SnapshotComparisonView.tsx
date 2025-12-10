@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2, GitBranch, Plus, Minus, Edit, ArrowRight } from 'lucide-react';
 import { TableInfo, TableMetadata, SnapshotComparison } from '@/types';
-import axios from 'axios';
+import api from '@/lib/api';
 
 interface SnapshotComparisonViewProps {
   tableInfo: TableInfo;
@@ -62,7 +62,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
       if (tableInfo.projectId) {
         params.project_id = tableInfo.projectId;
       }
-      const response = await axios.get('/api/backend/snapshot/compare', { params });
+      const response = await api.get('/snapshot/compare', { params });
       setComparison(response.data);
     } catch (err) {
       let errorMessage = 'Failed to load snapshot comparison.';

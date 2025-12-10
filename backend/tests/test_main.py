@@ -25,7 +25,7 @@ async def test_analyze_table_mocked(client):
         }
         
         # Call the endpoint
-        response = await client.get(f"/analyze?bucket={bucket}&path={path}")
+        response = await client.get(f"/api/backend/analyze?bucket={bucket}&path={path}")
         
         # Verify response
         assert response.status_code == 200
@@ -52,7 +52,7 @@ async def test_analyze_table_with_token(client):
         
         # Call with Authorization header
         headers = {"Authorization": f"Bearer {token}"}
-        response = await client.get(f"/analyze?bucket={bucket}&path={path}", headers=headers)
+        response = await client.get(f"/api/backend/analyze?bucket={bucket}&path={path}", headers=headers)
         
         assert response.status_code == 200
         

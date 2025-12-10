@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Folder, File, Loader2, Search, Database } from 'lucide-react';
 import { TableInfo } from '@/types';
-import axios from 'axios';
+import api from '@/lib/api';
 
 interface BucketBrowserProps {
   onTableSelect: (table: TableInfo) => void;
@@ -57,7 +57,7 @@ export default function BucketBrowser({
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('/api/backend/projects');
+      const response = await api.get('/projects');
       const projectsList = response.data.projects || [];
       setProjects(projectsList);
       
@@ -113,7 +113,7 @@ export default function BucketBrowser({
     try {
       setLoadingBuckets(true);
       setError(null);
-      const response = await axios.get('/api/backend/buckets', {
+      const response = await api.get('/buckets', {
         params: { project_id: projectToUse },
       });
       setBuckets(response.data.buckets || []);
@@ -121,7 +121,16 @@ export default function BucketBrowser({
       setSelectedBucket('');
       setCurrentPath('');
     } catch (err) {
-      setError('Failed to load buckets. Make sure GCS credentials are configured.');
+      let errorMessage = 'Failed to load buckets.';
+      if (err && typeof err === 'object' && 'response' in err) {
+        const axiosError = err as { response?: { status?: number; data?: { detail?: string } } };
+        if (axiosError.response?.status === 401 || axiosError.response?.status === 403) {
+          errorMessage = 'Authentication failed. Please sign in again.';
+        } else if (axiosError.response?.data?.detail) {
+          errorMessage = axiosError.response.data.detail;
+        }
+      }
+      setError(errorMessage);
       console.error('Error loading buckets:', err);
     } finally {
       setLoadingBuckets(false);
@@ -135,7 +144,7 @@ export default function BucketBrowser({
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('/api/backend/browse', {
+      const response = await api.get('/browse', {
         params: { bucket, path, project_id: projectToUse },
       });
       setFolders(response.data.folders || []);
@@ -189,7 +198,7 @@ export default function BucketBrowser({
     try {
       setDiscovering(true);
       setError(null);
-      const response = await axios.get('/api/backend/discover', {
+      const response = await api.get('/discover', {
         params: { bucket: selectedBucket, project_id: currentProject },
       });
       const tables = response.data.tables || [];
@@ -288,7 +297,15 @@ export default function BucketBrowser({
             </div>
           ) : error ? (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-400">
-              {error}
+                <p>{error}</p>
+                {(error.includes('Authentication failed') || error.includes('sign in')) && (
+                  <button
+                    onClick={() => window.location.href = '/login'}
+                    className="mt-2 px-4 py-2 bg-red-100 dark:bg-red-800 hover:bg-red-200 dark:hover:bg-red-700 text-red-800 dark:text-red-100 rounded-md text-sm font-medium transition-colors"
+                  >
+                    Sign In
+                  </button>
+                )}
             </div>
           ) : (
                 <div className="space-y-2">
@@ -370,7 +387,15 @@ export default function BucketBrowser({
             </div>
           ) : error ? (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-400">
-              {error}
+                  <p>{error}</p>
+                  {(error.includes('Authentication failed') || error.includes('sign in')) && (
+                    <button
+                      onClick={() => window.location.href = '/login'}
+                      className="mt-2 px-4 py-2 bg-red-100 dark:bg-red-800 hover:bg-red-200 dark:hover:bg-red-700 text-red-800 dark:text-red-100 rounded-md text-sm font-medium transition-colors"
+                    >
+                      Sign In
+                    </button>
+                  )}
             </div>
           ) : (
                   <div className="space-y-4">

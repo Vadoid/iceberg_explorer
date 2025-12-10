@@ -158,23 +158,26 @@ npm run dev
 
 ### App Engine (Standard Environment)
 
-The application is configured for deployment to Google App Engine (Node.js 22 runtime).
+The application is deployed as **two separate App Engine services** to support different runtimes for the frontend (Node.js 22) and backend (Python 3.11), while maintaining a unified domain.
 
-1. **Prerequisites**:
-   - Google Cloud Project with App Engine enabled
-   - GitHub Repository with this code
+1. **Architecture**:
+   - **Frontend Service (`default`)**: Next.js application running on Node.js 22. Handles UI and API proxying.
+   - **Backend Service (`backend`)**: FastAPI application running on Python 3.11. Handles business logic and GCS operations.
+   - **Routing**: `dispatch.yaml` routes all traffic matching `/api/backend/*` to the `backend` service.
 
-2. **Configuration**:
-   - `app.yaml`: Configures the App Engine runtime and scaling settings.
-   - `.github/workflows/deploy.yml`: GitHub Actions workflow for automated deployment.
+2. **Configuration Files**:
+   - `app.yaml`: Frontend service configuration.
+   - `backend/app.yaml`: Backend service configuration.
+   - `dispatch.yaml`: Routing rules.
+   - `.github/workflows/deploy.yml`: CI/CD workflow that deploys both services and the dispatch configuration.
 
 3. **Secrets**:
    Configure the following secrets in your GitHub Repository:
    - `GCP_PROJECT_ID`: Your Google Cloud Project ID
    - `WIF_PROVIDER`: Workload Identity Federation Provider
    - `WIF_SERVICE_ACCOUNT`: Service Account for deployment
-   - `NEXT_PUBLIC_API_URL`: URL of your deployed backend
-   - `NEXTAUTH_URL`: URL of your deployed frontend
+   - `NEXT_PUBLIC_API_URL`: URL of your deployed backend (e.g., `https://backend-dot-YOUR_PROJECT_ID.uc.r.appspot.com` or just `/api/backend` if using dispatch)
+   - `NEXTAUTH_URL`: URL of your deployed frontend (e.g., `https://YOUR_PROJECT_ID.uc.r.appspot.com`)
    - `NEXTAUTH_SECRET`: Random string for NextAuth
    - `GOOGLE_CLIENT_ID`: Google OAuth Client ID
    - `GOOGLE_CLIENT_SECRET`: Google OAuth Client Secret

@@ -5,41 +5,33 @@ from ..services.gcs import get_storage_client
 
 router = APIRouter()
 
+from google.api_core.exceptions import Forbidden, Unauthorized
+
 @router.get("/buckets")
 async def list_buckets(project_id: Optional[str] = None, token: Optional[str] = Depends(get_current_user_token)):
     """List all GCS buckets accessible with current credentials, optionally filtered by project"""
-    try:
-        client = get_storage_client(project_id=project_id, token=token)
-        buckets = []
-        for bucket in client.list_buckets():
-            # If project_id is specified, only return buckets from that project
-            if project_id:
-                if bucket.project_number:
-                    # Get project ID from bucket metadata if available
-                    try:
-                        bucket.reload()
-                        if bucket.project_number:
-                            # We can't easily get project_id from bucket, so we'll list all
-                            # and filter by checking if bucket is accessible in the specified project
-                            buckets.append(bucket.name)
-                    except Exception:
-                        # If we can't reload, just include it
+    client = get_storage_client(project_id=project_id, token=token)
+    buckets = []
+    for bucket in client.list_buckets():
+        # If project_id is specified, only return buckets from that project
+        if project_id:
+            if bucket.project_number:
+                # Get project ID from bucket metadata if available
+                try:
+                    bucket.reload()
+                    if bucket.project_number:
+                        # We can't easily get project_id from bucket, so we'll list all
+                        # and filter by checking if bucket is accessible in the specified project
                         buckets.append(bucket.name)
-                else:
+                except Exception:
+                    # If we can't reload, just include it
                     buckets.append(bucket.name)
             else:
                 buckets.append(bucket.name)
-        
-        return {"buckets": buckets}
-    except Exception as e:
-        error_msg = str(e)
-        # Provide helpful error message for authentication issues
-        if "credentials" in error_msg.lower() or "authentication" in error_msg.lower() or "permission" in error_msg.lower():
-            error_msg += "\n\nAuthentication Error: Make sure you've run:\n"
-            error_msg += "  gcloud auth application-default login\n"
-            error_msg += "  gcloud auth application-default set-quota-project YOUR_PROJECT_ID\n"
-            error_msg += "\nOr set GOOGLE_APPLICATION_CREDENTIALS to a service account JSON file."
-        raise HTTPException(status_code=500, detail=error_msg)
+        else:
+            buckets.append(bucket.name)
+    
+    return {"buckets": buckets}
 
 
 @router.get("/discover")

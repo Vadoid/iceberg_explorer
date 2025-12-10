@@ -1,6 +1,14 @@
+service: default
 runtime: nodejs22
 
 instance_class: F1
+
+skip_files:
+  - ^backend/.*$
+  - ^\.venv/.*$
+  - ^\.git/.*$
+  - ^\.github/.*$
+  - ^tests/.*$
 
 env_variables:
   # These will be overridden by the deploy step in GitHub Actions

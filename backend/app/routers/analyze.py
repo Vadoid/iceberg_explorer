@@ -70,22 +70,42 @@ async def analyze_table(bucket: str, path: str, project_id: Optional[str] = None
             
             # Actually, I can just copy the logic from main.py since I have it.
             pass # Continue to logic below
+        except Exception:
+            raise
             
-        except Exception as e:
-            # Provide more detailed error information
-            error_msg = str(e)
-            import traceback
+    except (Forbidden, Unauthorized) as e:
+        raise HTTPException(
+            status_code=401 if isinstance(e, Unauthorized) else 403,
+            detail=f"Authentication failed: {str(e)}"
+        )
+    except Exception as e:
+        # Check for GCS permission errors (fallback for non-api_core exceptions)
+        error_str = str(e)
+        if "403" in error_str or "Forbidden" in error_str:
             raise HTTPException(
-                status_code=404,
-                detail=f"Failed to read Iceberg metadata:\n{error_msg}\n\n"
-                       f"Bucket: {bucket}\n"
-                       f"Path: {normalized_path}\n"
-                       f"Project: {project_id or 'default'}\n\n"
-                       f"Please verify:\n"
-                       f"1. The path is correct\n"
-                       f"2. The table has a metadata/ directory\n"
-                       f"3. There are .metadata.json files in the metadata directory"
+                status_code=403,
+                detail="Permission denied. You do not have access to this bucket or object. Please check your GCS permissions."
             )
+        if "401" in error_str or "Unauthorized" in error_str:
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication failed. Please try logging in again."
+            )
+            
+        # Provide more detailed error information for other errors
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=404,
+            detail=f"Failed to read Iceberg metadata:\n{error_str}\n\n"
+                   f"Bucket: {bucket}\n"
+                   f"Path: {normalized_path}\n"
+                   f"Project: {project_id or 'default'}\n\n"
+                   f"Please verify:\n"
+                   f"1. The path is correct\n"
+                   f"2. The table has a metadata/ directory\n"
+                   f"3. There are .metadata.json files in the metadata directory"
+        )
 
         # Extract schema - Iceberg v2 uses "schemas" (plural) array
         schema_fields = []
@@ -221,3 +241,27 @@ async def analyze_table(bucket: str, path: str, project_id: Optional[str] = None
         import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+from google.api_core.exceptions import Forbidden, Unauthorized
+
+@router.get("/sample")
+async def get_sample(bucket: str, path: str, limit: int = 100, project_id: Optional[str] = None, token: Optional[str] = Depends(get_current_user_token)):
+    """Get sample data from an Iceberg table"""
+    from ..services.iceberg import get_sample_data
+    data = get_sample_data(bucket, path, limit, project_id, token=token)
+    return data
+
+@router.get("/snapshot/compare")
+async def compare_snapshots_endpoint(
+    bucket: str, 
+    path: str, 
+    snapshot_id_1: str, 
+    snapshot_id_2: str, 
+    project_id: Optional[str] = None, 
+    token: Optional[str] = Depends(get_current_user_token)
+):
+    """Compare two snapshots"""
+    from ..services.iceberg import compare_snapshots
+    # Handle empty snapshot_id_1 which might come as "null" or empty string
+    s1 = snapshot_id_1 if snapshot_id_1 and snapshot_id_1 != "null" else ""
+    return compare_snapshots(bucket, path, s1, snapshot_id_2, project_id, token=token)
