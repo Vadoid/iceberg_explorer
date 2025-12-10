@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import BucketBrowser from '@/components/BucketBrowser';
 import TableAnalyzer from '@/components/TableAnalyzer';
+import ProfileButton from '@/components/ProfileButton';
 import { TableInfo } from '@/types';
 
 export default function Home() {
@@ -66,14 +67,17 @@ export default function Home() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 flex justify-between items-center">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
-            {selectedTable ? `Analysis: ${selectedTable.name}` : 'Table Analysis'}
-          </h2>
-          {selectedTable && (
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              {selectedTable.path}
-            </div>
-          )}
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
+              {selectedTable ? `Analysis: ${selectedTable.name}` : 'Table Analysis'}
+            </h2>
+            {selectedTable && (
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                {selectedTable.path}
+              </div>
+            )}
+          </div>
+          <ProfileButton />
         </header>
 
         <main className="flex-1 overflow-auto p-6">

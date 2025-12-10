@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   description: 'Explore and analyze Apache Iceberg tables from GCS',
 };
 
+import AuthProvider from '@/components/AuthProvider';
+
 export default function RootLayout({
   children,
 }: {
@@ -13,7 +15,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
+      </body>
     </html>
   );
 }
