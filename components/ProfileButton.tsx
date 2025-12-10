@@ -3,9 +3,11 @@
 import { useSession, signOut } from 'next-auth/react';
 import { useState, useRef, useEffect } from 'react';
 import { LogOut, User, ChevronDown } from 'lucide-react';
+import { useTheme } from './ThemeProvider';
 
 export default function ProfileButton() {
   const { data: session } = useSession();
+  const { theme, setTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -62,7 +64,42 @@ export default function ProfileButton() {
             </p>
           </div>
 
-          <div className="px-1">
+          <div className="px-1 border-t border-gray-100 dark:border-gray-700 pt-1">
+            <div className="px-3 py-2">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Theme</p>
+              <div className="flex gap-1 bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg">
+                <button
+                  onClick={() => setTheme('light')}
+                  className={`flex-1 p-1.5 rounded-md text-xs font-medium transition-all ${theme === 'light'
+                    ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                >
+                  Light
+                </button>
+                <button
+                  onClick={() => setTheme('dark')}
+                  className={`flex-1 p-1.5 rounded-md text-xs font-medium transition-all ${theme === 'dark'
+                    ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                >
+                  Dark
+                </button>
+                <button
+                  onClick={() => setTheme('system')}
+                  className={`flex-1 p-1.5 rounded-md text-xs font-medium transition-all ${theme === 'system'
+                    ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                >
+                  Auto
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-1 border-t border-gray-100 dark:border-gray-700 pt-1">
             <button
               onClick={() => signOut({ callbackUrl: '/login' })}
               className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 transition-colors"

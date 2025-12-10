@@ -7,6 +7,7 @@ export const metadata: Metadata = {
 };
 
 import AuthProvider from '@/components/AuthProvider';
+import { ThemeProvider } from '@/components/ThemeProvider';
 
 export default function RootLayout({
   children,
@@ -17,7 +18,9 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <AuthProvider>
-          {children}
+          <ThemeProvider defaultTheme="system" storageKey="iceberg-explorer-theme">
+            {children}
+          </ThemeProvider>
         </AuthProvider>
       </body>
     </html>
