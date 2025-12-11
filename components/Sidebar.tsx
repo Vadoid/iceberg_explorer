@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import {
   LayoutGrid,
   Database,
@@ -28,6 +29,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ width, onTableSelect }: SidebarProps) {
+  const { data: session, status } = useSession();
   // const [activeTab, setActiveTab] = useState<'storage' | 'bigquery'>('storage');
   const [activeTab, setActiveTab] = useState<'storage'>('storage');
   const [projects, setProjects] = useState<Project[]>([]);
@@ -37,8 +39,16 @@ export default function Sidebar({ width, onTableSelect }: SidebarProps) {
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [showProjectInput, setShowProjectInput] = useState(false);
   const [favorites, setFavorites] = useState<TableInfo[]>([]);
-
   const [isStorageLoaded, setIsStorageLoaded] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState<string>('');
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
+
+  // Update activeProjectId when selectedProject changes (dropdown)
+  useEffect(() => {
+    if (!useManualProject && selectedProject) {
+      setActiveProjectId(selectedProject);
+    }
+  }, [selectedProject, useManualProject]);
 
   // Load state from localStorage on mount
   useEffect(() => {
@@ -51,6 +61,7 @@ export default function Sidebar({ width, onTableSelect }: SidebarProps) {
       const storedProject = localStorage.getItem('iceberg_selected_project');
       if (storedProject) {
         setSelectedProject(storedProject);
+        setActiveProjectId(storedProject);
       }
     } catch (e) {
       console.error('Failed to load from localStorage', e);
@@ -59,24 +70,12 @@ export default function Sidebar({ width, onTableSelect }: SidebarProps) {
     }
   }, []);
 
-  // Save favorites to localStorage
-  useEffect(() => {
-    if (isStorageLoaded) {
-      localStorage.setItem('iceberg_favorites', JSON.stringify(favorites));
-    }
-  }, [favorites, isStorageLoaded]);
-
-  // Load projects
-  useEffect(() => {
-    loadProjects();
-  }, []);
-
   // Save selected project to localStorage
   useEffect(() => {
-    if (isStorageLoaded && selectedProject) {
-      localStorage.setItem('iceberg_selected_project', selectedProject);
+    if (isStorageLoaded && activeProjectId) {
+      localStorage.setItem('iceberg_selected_project', activeProjectId);
     }
-  }, [selectedProject, isStorageLoaded]);
+  }, [activeProjectId, isStorageLoaded]);
 
   const loadProjects = async () => {
     try {
@@ -88,15 +87,37 @@ export default function Sidebar({ width, onTableSelect }: SidebarProps) {
       console.error('Failed to load projects', err);
     } finally {
       setLoadingProjects(false);
+      setProjectsLoaded(true);
     }
   };
 
-  // Auto-select removed to require explicit user selection
-  // useEffect(() => {
-  //   if (isStorageLoaded && projects.length > 0 && !selectedProject) {
-  //     setSelectedProject(projects[0].id);
-  //   }
-  // }, [isStorageLoaded, projects, selectedProject]);
+  // Load projects on mount
+  useEffect(() => {
+    if (status === 'authenticated') {
+      loadProjects();
+    }
+  }, [status]);
+
+  // Sync UI with activeProjectId and projects list
+  useEffect(() => {
+    // Only enforce validation after projects have finished loading
+    if (loadingProjects || !projectsLoaded) return;
+
+    if (activeProjectId) {
+      const projectExists = projects.some(p => p.id === activeProjectId);
+
+      if (projectExists) {
+        setSelectedProject(activeProjectId);
+        setUseManualProject(false);
+        setShowProjectInput(false);
+      } else {
+        // If cached project is not in the list (and list has loaded),
+        // clear it to ensure we don't load buckets for an invisible project.
+        setActiveProjectId('');
+        setSelectedProject('');
+      }
+    }
+  }, [activeProjectId, projects, loadingProjects, projectsLoaded]);
 
   const toggleFavorite = (table: TableInfo) => {
     if (favorites.some(f => f.location === table.location)) {
@@ -106,7 +127,11 @@ export default function Sidebar({ width, onTableSelect }: SidebarProps) {
     }
   };
 
-  const currentProject = useManualProject ? manualProjectId : selectedProject;
+  const handleManualSubmit = () => {
+    if (manualProjectId) {
+      setActiveProjectId(manualProjectId);
+    }
+  };
 
   return (
     <aside
@@ -132,6 +157,7 @@ export default function Sidebar({ width, onTableSelect }: SidebarProps) {
                 onChange={(e) => {
                   setSelectedProject(e.target.value);
                   setUseManualProject(false);
+                  setActiveProjectId(e.target.value);
                 }}
                 className="w-full appearance-none px-3 py-2 pr-8 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 disabled={loadingProjects}
@@ -144,7 +170,7 @@ export default function Sidebar({ width, onTableSelect }: SidebarProps) {
               <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
             </div>
           ) : (
-            <div className="relative">
+              <div className="flex gap-2">
               <input
                 type="text"
                 value={manualProjectId}
@@ -152,9 +178,20 @@ export default function Sidebar({ width, onTableSelect }: SidebarProps) {
                   setManualProjectId(e.target.value);
                   setUseManualProject(true);
                 }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleManualSubmit();
+                    }
+                  }}
                 placeholder="Enter Project ID"
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+                <button
+                  onClick={handleManualSubmit}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  Load
+                </button>
             </div>
           )}
 
@@ -229,7 +266,7 @@ export default function Sidebar({ width, onTableSelect }: SidebarProps) {
         <div className="p-4">
           {activeTab === 'storage' ? (
             <BucketBrowser
-              projectId={currentProject}
+              projectId={activeProjectId}
               onTableSelect={onTableSelect}
               onToggleFavorite={toggleFavorite}
               favorites={favorites}
