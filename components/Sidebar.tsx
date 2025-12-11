@@ -91,12 +91,12 @@ export default function Sidebar({ width, onTableSelect }: SidebarProps) {
     }
   };
 
-  // Set default project if none selected and projects loaded
-  useEffect(() => {
-    if (isStorageLoaded && projects.length > 0 && !selectedProject) {
-      setSelectedProject(projects[0].id);
-    }
-  }, [isStorageLoaded, projects, selectedProject]);
+  // Auto-select removed to require explicit user selection
+  // useEffect(() => {
+  //   if (isStorageLoaded && projects.length > 0 && !selectedProject) {
+  //     setSelectedProject(projects[0].id);
+  //   }
+  // }, [isStorageLoaded, projects, selectedProject]);
 
   const toggleFavorite = (table: TableInfo) => {
     if (favorites.some(f => f.location === table.location)) {

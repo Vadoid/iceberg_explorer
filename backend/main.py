@@ -38,11 +38,17 @@ from google.api_core.exceptions import Unauthorized, Forbidden
 @app.exception_handler(DefaultCredentialsError)
 @app.exception_handler(TransportError)
 @app.exception_handler(Unauthorized)
-@app.exception_handler(Forbidden)
 async def auth_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=401,
         content={"detail": "Authentication failed. Please login again.", "error": str(exc)},
+    )
+
+@app.exception_handler(Forbidden)
+async def forbidden_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=403,
+        content={"detail": "Access denied. You do not have permission to access this resource.", "error": str(exc)},
     )
 
 @app.get("/")

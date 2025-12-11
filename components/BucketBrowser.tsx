@@ -56,8 +56,11 @@ export default function BucketBrowser({
       let errorMessage = 'Failed to load buckets.';
       if (err && typeof err === 'object' && 'response' in err) {
         const axiosError = err as { response?: { status?: number; data?: { detail?: string } } };
-        if (axiosError.response?.status === 401 || axiosError.response?.status === 403) {
+        if (axiosError.response?.status === 401) {
           errorMessage = 'Authentication failed. Please sign in again.';
+        } else if (axiosError.response?.status === 403) {
+          errorMessage = axiosError.response.data?.detail || 'Access denied. You do not have permission to view buckets in this project.';
+          errorMessage += ' Ensure you have "storage.buckets.list" permission.';
         } else if (axiosError.response?.data?.detail) {
           errorMessage = axiosError.response.data.detail;
         }

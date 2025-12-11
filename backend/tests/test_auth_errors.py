@@ -16,19 +16,14 @@ async def test_auth_unauthorized(client):
 
 @pytest.mark.asyncio
 async def test_auth_forbidden(client):
-    """Test that Forbidden exception returns 401 (as implemented in main.py handler)"""
-    # Note: In main.py, we mapped Forbidden to 401 as well in the global handler
-    # Let's check main.py again...
-    # @app.exception_handler(Forbidden) -> status_code=401
-    # So it should be 401, not 403.
-    
+    """Test that Forbidden exception returns 403"""
     with patch("app.routers.buckets.get_storage_client") as mock_get_client:
         mock_get_client.side_effect = Forbidden("Access denied")
         
         response = await client.get("/api/backend/buckets")
         
-        assert response.status_code == 401
-        assert response.json()["detail"] == "Authentication failed. Please login again."
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Access denied. You do not have permission to access this resource."
 
 @pytest.mark.asyncio
 async def test_auth_refresh_error(client):
