@@ -75,7 +75,7 @@ export default function SampleDataView({ tableInfo, metadata }: SampleDataViewPr
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold">Sample Data</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Sample Data</h3>
           {sampleData && (
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Showing {sampleData.totalRows} rows from {sampleData.filesRead} file(s)
@@ -87,7 +87,7 @@ export default function SampleDataView({ tableInfo, metadata }: SampleDataViewPr
             <select
               value={selectedSnapshotId || ''}
               onChange={(e) => setSelectedSnapshotId(e.target.value || null)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-sm"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
             >
               <option value="">Current Snapshot</option>
               {metadata.snapshots.map((snapshot) => (

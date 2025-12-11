@@ -33,7 +33,7 @@ describe('IcebergTree', () => {
 
   it('renders metadata node', () => {
     render(<IcebergTree data={mockData} />)
-    expect(screen.getByText('v1.metadata.json')).toBeInTheDocument()
+    expect(screen.getAllByText('v1.metadata.json').length).toBeGreaterThan(0)
   })
   it('toggles history mode correctly', () => {
     const historyData = {
@@ -59,14 +59,14 @@ describe('IcebergTree', () => {
     render(<IcebergTree data={historyData} />)
 
     // Initially should only see v2
-    expect(screen.getByText('v2.metadata.json')).toBeInTheDocument()
+    expect(screen.getAllByText('v2.metadata.json').length).toBeGreaterThan(0)
     expect(screen.queryByText('v1.metadata.json')).not.toBeInTheDocument()
 
     // Click Show History
     fireEvent.click(screen.getByText('Show History'))
 
     // Now should see both
-    expect(screen.getByText('v2.metadata.json')).toBeInTheDocument()
-    expect(screen.getByText('v1.metadata.json')).toBeInTheDocument()
+    expect(screen.getAllByText('v2.metadata.json').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('v1.metadata.json').length).toBeGreaterThan(0)
   })
 })

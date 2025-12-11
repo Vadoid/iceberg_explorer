@@ -22,6 +22,17 @@ interface GraphData {
       partitionSpecId: number;
       addedSnapshotId: number;
       added_data_files_count?: number;
+      totalPartitionCount?: number;
+      partitions?: {
+        name: string;
+        fileCount: number;
+        dataFiles: {
+          path: string;
+          format: string;
+          recordCount: number;
+          fileSizeInBytes: number;
+        }[];
+      }[];
       dataFiles?: {
         path: string;
         format: string;
@@ -34,7 +45,7 @@ interface GraphData {
   }[];
 }
 
-interface TreeNode {
+export interface TreeNode {
   id: string;
   type: 'table' | 'metadata' | 'snapshot' | 'manifest-list' | 'manifest' | 'data-file' | 'more';
   label: string;
@@ -47,11 +58,14 @@ interface TreeNode {
   height?: number;
   parentId?: string;
   isHistorical?: boolean;
+  data?: any; // Store original data object for sampling
 }
 
 interface IcebergTreeProps {
   data: GraphData;
   className?: string;
+  onNodeSelect?: (node: TreeNode) => void;
+  selectedNodeId?: string | null;
 }
 
 // Node dimensions
@@ -60,7 +74,7 @@ const NODE_HEIGHT = 60;
 const LEVEL_HEIGHT = 120;
 const SIBLING_GAP = 40;
 
-export default function IcebergTree({ data, className }: IcebergTreeProps) {
+export default function IcebergTree({ data, className, onNodeSelect, selectedNodeId }: IcebergTreeProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['table']));
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [dragging, setDragging] = useState(false);
@@ -99,7 +113,8 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
           label: `v${metaFile.version}.metadata.json`,
           subLabel: new Date(metaFile.timestamp).toLocaleDateString(),
           children: [],
-          isHistorical: !isLatest
+          isHistorical: !isLatest,
+          details: metaFile // Pass full metadata file info
         };
         root.children?.push(metaNode);
 
@@ -141,7 +156,8 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
               type: 'snapshot',
               label: `s${snap.snapshotId.substring(0, 4)}...`,
               subLabel: snap.timestamp ? new Date(snap.timestamp).toLocaleTimeString() : '',
-              children: []
+              children: [],
+              data: { snapshotId: snap.snapshotId }
             };
             metaNode.children?.push(snapNode);
 
@@ -164,19 +180,81 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
                     type: 'manifest',
                     label: `Manifest ${mIdx}`,
                     subLabel: m.path.split('/').pop()?.substring(0, 15) + '...',
-                    children: []
+                    children: [],
+                    data: { manifestPath: m.path, snapshotId: snap.snapshotId }
                   };
                   mlNode.children?.push(mNode);
 
-                  // Data Files
-                  if (m.dataFiles) {
+                  // Partitions
+                  if (m.partitions) {
+                    m.partitions.forEach((p, pIdx) => {
+                      const pNode: TreeNode = {
+                        id: `p-${metaFile.version}-${snap.snapshotId}-${mIdx}-${pIdx}`,
+                        type: 'more', // Reuse 'more' style or add 'partition' type
+                        label: `Partition ${pIdx + 1}`,
+                        subLabel: p.name.length > 20 ? p.name.substring(0, 20) + '...' : p.name,
+                        children: [],
+                        details: {
+                          name: p.name,
+                          fileCount: p.fileCount
+                        }
+                      };
+                      mNode.children?.push(pNode);
+
+                      // Data Files (Limited)
+                      if (p.dataFiles) {
+                        p.dataFiles.forEach((df, dfIdx) => {
+                          const dfNode: TreeNode = {
+                            id: `df-${metaFile.version}-${snap.snapshotId}-${mIdx}-${pIdx}-${dfIdx}`,
+                            type: 'data-file',
+                            label: 'Data File',
+                            subLabel: df.path.split('/').pop()?.substring(0, 15) + '...',
+                            children: [],
+                            data: { filePath: df.path },
+                            details: {
+                              path: df.path,
+                              size: df.fileSizeInBytes,
+                              records: df.recordCount
+                            }
+                          };
+                          pNode.children?.push(dfNode);
+                        });
+
+                        // Add "More" node if there are more files
+                        if (p.fileCount > p.dataFiles.length) {
+                          const moreNode: TreeNode = {
+                            id: `more-${metaFile.version}-${snap.snapshotId}-${mIdx}-${pIdx}`,
+                            type: 'more',
+                            label: `+ ${p.fileCount - p.dataFiles.length} more`,
+                            subLabel: 'files',
+                            children: []
+                          };
+                          pNode.children?.push(moreNode);
+                        }
+                      }
+                    });
+
+                    // Add "More Partitions" node if needed
+                    if (m.totalPartitionCount && m.totalPartitionCount > m.partitions.length) {
+                      const morePartNode: TreeNode = {
+                        id: `more-p-${metaFile.version}-${snap.snapshotId}-${mIdx}`,
+                        type: 'more',
+                        label: `${m.partitions.length} out of ${m.totalPartitionCount}`,
+                        subLabel: 'partitions',
+                        children: []
+                      };
+                      mNode.children?.push(morePartNode);
+                    }
+                  } else if (m.dataFiles) {
+                    // Fallback for old structure or unpartitioned
                     m.dataFiles.forEach((df, dfIdx) => {
                       const dfNode: TreeNode = {
                         id: `df-${metaFile.version}-${snap.snapshotId}-${mIdx}-${dfIdx}`,
                         type: 'data-file',
                         label: 'Data File',
                         subLabel: df.path.split('/').pop()?.substring(0, 15) + '...',
-                        children: []
+                        children: [],
+                        data: { filePath: df.path }
                       };
                       mNode.children?.push(dfNode);
                     });
@@ -324,6 +402,13 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
             <path d="M0,15 C0,23 40,30 90,30 C140,30 180,23 180,15" fill="none" stroke="#3B82F6" strokeWidth="1" />
           </g>
         );
+      case 'more':
+        return (
+          <g>
+            <circle cx="90" cy="30" r="25" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="1" strokeDasharray="4 2" />
+            <text x="90" y="35" textAnchor="middle" fontSize="24" fill="#94A3B8">...</text>
+          </g>
+        );
       case 'metadata':
         if (node.isHistorical) {
           return (
@@ -440,12 +525,38 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
             <g 
               key={node.id} 
               transform={`translate(${node.x! - NODE_WIDTH/2}, ${node.y})`}
-              onClick={(e) => { e.stopPropagation(); toggleNode(node.id); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onNodeSelect) onNodeSelect(node);
+                // toggleNode(node.id); // Removed to prevent expansion on node click
+              }}
               className="cursor-pointer hover:opacity-90 transition-opacity"
             >
+              {/* Selection Highlight */}
+              {selectedNodeId === node.id && (
+                <rect
+                  x="-4"
+                  y="-4"
+                  width={NODE_WIDTH + 8}
+                  height={NODE_HEIGHT + 8}
+                  rx="8"
+                  fill="none"
+                  stroke="#3B82F6"
+                  strokeWidth="3"
+                  className="animate-pulse"
+                />
+              )}
+
               {renderNodeShape(node)}
               
               {/* Label */}
+              <title>
+                {node.details?.path ? node.details.path :
+                  node.details?.file ? node.details.file :
+                    node.data?.filePath ? node.data.filePath :
+                      node.details ? JSON.stringify(node.details, null, 2) :
+                        node.label + (node.subLabel ? '\n' + node.subLabel : '')}
+              </title>
               <foreignObject x="0" y="0" width={NODE_WIDTH} height={NODE_HEIGHT}>
                 <div className="w-full h-full flex flex-col items-center justify-center text-center p-2 pointer-events-none">
                   <div className="text-xs font-bold text-slate-700 truncate w-full">{node.label}</div>
@@ -455,26 +566,27 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
 
               {/* Expand/Collapse Indicator */}
               {node.children && node.children.length > 0 && (
-                <circle 
-                  cx={NODE_WIDTH/2} 
-                  cy={NODE_HEIGHT} 
-                  r="8" 
-                  fill="white" 
-                  stroke="#94A3B8" 
-                  strokeWidth="1"
-                />
-              )}
-              {node.children && node.children.length > 0 && (
-                <text 
-                  x={NODE_WIDTH/2} 
-                  y={NODE_HEIGHT + 3} 
-                  textAnchor="middle" 
-                  fontSize="10" 
-                  fill="#64748B"
-                  className="pointer-events-none"
-                >
-                  {expandedIds.has(node.id) ? '-' : '+'}
-                </text>
+                <g onClick={(e) => { e.stopPropagation(); toggleNode(node.id); }}>
+                  <circle
+                    cx={NODE_WIDTH / 2}
+                    cy={NODE_HEIGHT}
+                    r="8"
+                    fill="white"
+                    stroke="#94A3B8"
+                    strokeWidth="1"
+                    className="hover:fill-slate-100 cursor-pointer"
+                  />
+                  <text
+                    x={NODE_WIDTH / 2}
+                    y={NODE_HEIGHT + 3}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fill="#64748B"
+                    className="pointer-events-none"
+                  >
+                    {expandedIds.has(node.id) ? '-' : '+'}
+                  </text>
+                </g>
               )}
             </g>
           ))}

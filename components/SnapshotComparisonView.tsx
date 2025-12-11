@@ -124,7 +124,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
           <select
             value={snapshot1Id || ''}
             onChange={(e) => setSnapshot1Id(e.target.value || null)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
           >
             <option value="">(None - Start of History)</option>
             {metadata.snapshots.map((snapshot) => (
@@ -140,7 +140,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
           <select
             value={snapshot2Id || ''}
             onChange={(e) => setSnapshot2Id(e.target.value || null)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
           >
             {metadata.snapshots.map((snapshot) => (
               <option key={snapshot.snapshotId} value={snapshot.snapshotId.toString()}>
@@ -190,7 +190,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
           </div>
 
           {/* Detailed Statistics */}
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-gray-900 dark:text-gray-100">
             <h3 className="text-lg font-semibold mb-4">Statistics Comparison</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -239,7 +239,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
               <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 max-h-64 overflow-y-auto">
                 <div className="space-y-2">
                   {comparison.addedFiles.map((file, idx) => (
-                    <div key={idx} className="text-sm font-mono bg-white dark:bg-gray-800 p-2 rounded">
+                    <div key={idx} className="text-sm font-mono bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-2 rounded border border-gray-200 dark:border-gray-700">
                       {file.filePath} ({formatBytes(file.fileSizeInBytes)}, {formatNumber(file.recordCount)} records)
                     </div>
                   ))}
@@ -258,7 +258,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 max-h-64 overflow-y-auto">
                 <div className="space-y-2">
                   {comparison.removedFiles.map((file, idx) => (
-                    <div key={idx} className="text-sm font-mono bg-white dark:bg-gray-800 p-2 rounded">
+                    <div key={idx} className="text-sm font-mono bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-2 rounded border border-gray-200 dark:border-gray-700">
                       {file.filePath} ({formatBytes(file.fileSizeInBytes)}, {formatNumber(file.recordCount)} records)
                     </div>
                   ))}
@@ -277,7 +277,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 max-h-64 overflow-y-auto">
                 <div className="space-y-3">
                   {comparison.modifiedFiles.map((file, idx) => (
-                    <div key={idx} className="bg-white dark:bg-gray-800 p-3 rounded">
+                    <div key={idx} className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-3 rounded border border-gray-200 dark:border-gray-700">
                       <div className="text-sm font-mono mb-2">{file.filePath}</div>
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
@@ -285,7 +285,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
                           <div>
                             {formatBytes(file.before.fileSizeInBytes)} → {formatBytes(file.after.fileSizeInBytes)}
                             {file.changes.sizeDelta !== 0 && (
-                              <span className={`ml-2 ${file.changes.sizeDelta >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              <span className={`ml-2 ${file.changes.sizeDelta >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                 ({file.changes.sizeDelta >= 0 ? '+' : ''}{formatBytes(file.changes.sizeDelta)})
                               </span>
                             )}
@@ -296,7 +296,7 @@ export default function SnapshotComparisonView({ tableInfo, metadata }: Snapshot
                           <div>
                             {formatNumber(file.before.recordCount)} → {formatNumber(file.after.recordCount)}
                             {file.changes.recordDelta !== 0 && (
-                              <span className={`ml-2 ${file.changes.recordDelta >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              <span className={`ml-2 ${file.changes.recordDelta >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                 ({file.changes.recordDelta >= 0 ? '+' : ''}{formatNumber(file.changes.recordDelta)})
                               </span>
                             )}

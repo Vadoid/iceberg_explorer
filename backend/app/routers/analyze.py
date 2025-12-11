@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict, Any, Optional
 from ..core.security import get_current_user_token
-from ..services.iceberg import analyze_with_pyiceberg_metadata, read_iceberg_metadata_manual, PYICEBERG_AVAILABLE
+from ..services.iceberg import analyze_with_pyiceberg_metadata, read_iceberg_metadata_manual, get_manual_data_files, PYICEBERG_AVAILABLE
 
 router = APIRouter()
 
@@ -231,8 +231,10 @@ async def analyze_table(bucket: str, path: str, project_id: Optional[str] = None
             "sortOrder": sort_order,
             "properties": metadata.get("properties", {}),
             "currentSnapshotId": str(metadata.get("current-snapshot-id", -1)),
+
             "snapshots": metadata.get("snapshots", []),
-            "dataFiles": [], # Manual parsing doesn't easily get data files without reading manifests
+            # Try to get data files from current snapshot for graph
+            "dataFiles": get_manual_data_files(bucket, normalized_path, metadata, project_id, token),
             "partitionStats": [],
             "metadataFiles": [], # Could populate this if we had the list from read_iceberg_metadata_manual
         }
@@ -245,10 +247,19 @@ async def analyze_table(bucket: str, path: str, project_id: Optional[str] = None
 from google.api_core.exceptions import Forbidden, Unauthorized
 
 @router.get("/sample")
-async def get_sample(bucket: str, path: str, limit: int = 100, project_id: Optional[str] = None, token: Optional[str] = Depends(get_current_user_token)):
-    """Get sample data from an Iceberg table"""
+async def get_sample(
+    bucket: str, 
+    path: str, 
+    limit: int = 100, 
+    snapshot_id: Optional[str] = None,
+    manifest_path: Optional[str] = None,
+    file_path: Optional[str] = None,
+    project_id: Optional[str] = None, 
+    token: Optional[str] = Depends(get_current_user_token)
+):
+    """Get sample data from an Iceberg table, optionally targeting a specific snapshot, manifest, or file"""
     from ..services.iceberg import get_sample_data
-    data = get_sample_data(bucket, path, limit, project_id, token=token)
+    data = get_sample_data(bucket, path, limit, project_id, token=token, snapshot_id=snapshot_id, manifest_path=manifest_path, file_path=file_path)
     return data
 
 @router.get("/snapshot/compare")

@@ -576,21 +576,55 @@ def analyze_with_pyiceberg_metadata(bucket: str, path: str, project_id: Optional
                             "dataFiles": []
                         }
                         
-                        # Get data files for this manifest (limit to 5)
+                        # Get data files for this manifest (grouped by partition)
                         try:
                             entries = manifest.fetch_manifest_entry(table.io)
-                            count = 0
+                            partition_groups = {}
+                            partition_counts = {}
+                            
                             for entry in entries:
-                                if count >= 5:
-                                    break
                                 data_file = entry.data_file
-                                manifest_data["dataFiles"].append({
-                                    "path": data_file.file_path,
-                                    "format": str(data_file.file_format),
-                                    "recordCount": data_file.record_count,
-                                    "fileSizeInBytes": data_file.file_size_in_bytes
+                                # Extract partition info
+                                partition_str = "Unpartitioned"
+                                if hasattr(data_file, 'partition') and data_file.partition:
+                                    try:
+                                        # Convert partition record to string representation
+                                        # data_file.partition is a Record.
+                                        partition_str = str(data_file.partition).replace("Record", "").strip("()")
+                                        if not partition_str or partition_str == "()":
+                                            partition_str = "Unpartitioned"
+                                    except Exception:
+                                        partition_str = "Unknown Partition"
+                                
+                                if partition_str not in partition_groups:
+                                    partition_groups[partition_str] = []
+                                    partition_counts[partition_str] = 0
+                                
+                                partition_counts[partition_str] += 1
+                                
+                                if len(partition_groups[partition_str]) < 5:
+                                    partition_groups[partition_str].append({
+                                        "path": data_file.file_path,
+                                        "format": str(data_file.file_format),
+                                        "recordCount": data_file.record_count,
+                                        "fileSizeInBytes": data_file.file_size_in_bytes
+                                    })
+                            
+                            # Convert groups to list (limit to 5 partitions)
+                            manifest_data["partitions"] = []
+                            sorted_partitions = sorted(partition_groups.keys())
+                            manifest_data["totalPartitionCount"] = len(sorted_partitions)
+                            
+                            for i, p_name in enumerate(sorted_partitions):
+                                if i >= 5:
+                                    break
+                                p_files = partition_groups[p_name]
+                                manifest_data["partitions"].append({
+                                    "name": p_name,
+                                    "fileCount": partition_counts[p_name],
+                                    "dataFiles": p_files
                                 })
-                                count += 1
+                                
                         except Exception as e:
                             print(f"Error reading manifest entries for {manifest.manifest_path}: {e}")
                             
@@ -933,10 +967,12 @@ def analyze_with_pyiceberg_metadata(bucket: str, path: str, project_id: Optional
             "partitionSpec": partition_spec,
             "sortOrder": sort_order,
             "properties": metadata_dict.get("properties", {}),
-            "currentSnapshotId": str(current_snapshot_id) if current_snapshot_id != -1 else -1,
-            "snapshots": snapshots,
-            "dataFiles": all_data_files,
-            "partitionStats": partition_stats,
+            "currentSnapshotId": str(metadata_dict.get("current-snapshot-id", -1)),
+            "snapshots": metadata_dict.get("snapshots", []),
+            # Try to get data files from current snapshot for graph
+            "dataFiles": _get_manual_data_files(bucket, normalized_path, metadata_dict, project_id, token),
+            "partitionStats": [],
+            "metadataFiles": [], # Could populate this if we had the list from read_iceberg_metadata_manual
             "statistics": {
                 "totalFiles": total_files,
                 "totalRecords": total_records,
@@ -950,7 +986,16 @@ def analyze_with_pyiceberg_metadata(bucket: str, path: str, project_id: Optional
         print(traceback.format_exc())
         return None
 
-def get_sample_data(bucket: str, path: str, limit: int = 100, project_id: Optional[str] = None, token: Optional[str] = None) -> Dict[str, Any]:
+def get_sample_data(
+    bucket: str, 
+    path: str, 
+    limit: int = 100, 
+    project_id: Optional[str] = None, 
+    token: Optional[str] = None,
+    snapshot_id: Optional[str] = None,
+    manifest_path: Optional[str] = None,
+    file_path: Optional[str] = None
+) -> Dict[str, Any]:
     """Get sample data from the table using optimized metadata traversal"""
     empty_result = {
         "rows": [],
@@ -961,6 +1006,139 @@ def get_sample_data(bucket: str, path: str, limit: int = 100, project_id: Option
     }
 
     try:
+        client = get_storage_client(project_id=project_id, token=token)
+        bucket_obj = client.bucket(bucket)
+
+        # Helper to read a specific parquet file
+        def read_parquet_file(blob_path: str):
+            import pandas as pd
+            try:
+                # Use gcsfs for efficient partial reads if available
+                import gcsfs
+                import pyarrow.parquet as pq
+                import warnings
+                
+                # Suppress GCS project warning
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=UserWarning, module="gcsfs")
+                    
+                    # If token is not provided (using default creds), avoid passing project to prevent mismatch errors
+                    fs_project = project_id if token else None
+                    fs = gcsfs.GCSFileSystem(project=fs_project, token=token if token else 'google_default')
+                    gcs_path = f"gs://{bucket}/{blob_path}"
+                    
+                    # Use ParquetFile for single file reading (safer than read_table)
+                    pq_file = pq.ParquetFile(gcs_path, filesystem=fs)
+                    
+                    # Read only needed rows if possible (though we need to convert to pandas)
+                    # reading the first row group might be enough if it has enough rows
+                    # But for simplicity, let's read the file (or first few row groups)
+                    
+                    # If we just want head, we can read the first row group
+                    if pq_file.num_row_groups > 0:
+                        table = pq_file.read_row_group(0)
+                        if table.num_rows < limit and pq_file.num_row_groups > 1:
+                            # If first row group is small, read more or just read all
+                            table = pq_file.read()
+                    else:
+                        table = pq_file.read()
+
+                    # Convert to pandas with limit
+                    df_head = table.slice(0, limit).to_pandas()
+                
+                for col in df_head.columns:
+                    if pd.api.types.is_datetime64_any_dtype(df_head[col]):
+                        df_head[col] = df_head[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                
+                # Add file name column
+                # User wants "top folder/data/file"
+                # If path is warehouse/db/table/data/file.parquet, we want table/data/file.parquet
+                # We can try to find the table name in the path and take everything after it
+                
+                display_path = blob_path
+                parts = blob_path.split("/")
+                if len(parts) > 2:
+                    # Try to find "data" and go one level up
+                    try:
+                        data_idx = parts.index("data")
+                        if data_idx > 0:
+                            display_path = "/".join(parts[data_idx-1:])
+                    except ValueError:
+                        # "data" not found, just use last 3 parts if available
+                        if len(parts) >= 3:
+                            display_path = "/".join(parts[-3:])
+                
+                # Add to dataframe
+                df_head["_file_name"] = display_path
+                
+                rows = df_head.to_dict(orient='records')
+                columns = list(df_head.columns)
+                
+                # Ensure _file_name is first
+                if "_file_name" in columns:
+                    columns.remove("_file_name")
+                    columns.insert(0, "_file_name")
+                
+                return {
+                    "rows": rows,
+                    "columns": columns,
+                    "totalRows": len(rows),
+                    "filesRead": 1,
+                    "message": None
+                }
+            except Exception as gcs_err:
+                print(f"GCSFS sample failed, falling back to download: {gcs_err}")
+                # Fallback to downloading full file
+                blob = bucket_obj.blob(blob_path)
+                from io import BytesIO
+                content = blob.download_as_bytes()
+                df = pd.read_parquet(BytesIO(content))
+                df_head = df.head(limit)
+                
+                for col in df_head.columns:
+                    if pd.api.types.is_datetime64_any_dtype(df_head[col]):
+                        df_head[col] = df_head[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                
+                rows = df_head.to_dict(orient='records')
+                columns = list(df_head.columns)
+                
+                return {
+                    "rows": rows,
+                    "columns": columns,
+                    "totalRows": len(rows),
+                    "filesRead": 1,
+                    "message": None
+                }
+
+        # Case 1: Specific File Path provided
+        if file_path:
+            # Clean path
+            file_path_clean = file_path.replace(f"gs://{bucket}/", "").lstrip("/")
+            return read_parquet_file(file_path_clean)
+
+        # Case 2: Specific Manifest Path provided
+        if manifest_path:
+            manifest_path_clean = manifest_path.replace(f"gs://{bucket}/", "").lstrip("/")
+            blob = bucket_obj.blob(manifest_path_clean)
+            content = blob.download_as_bytes()
+            
+            manifest_data = []
+            if FASTAVRO_AVAILABLE:
+                from io import BytesIO
+                import fastavro
+                manifest_bytes_io = BytesIO(content)
+                manifest_data = list(fastavro.reader(manifest_bytes_io))
+            
+            if manifest_data:
+                first_entry = manifest_data[0]
+                data_file = first_entry.get("data_file") or first_entry
+                f_path = data_file.get("file_path") or data_file.get("filePath")
+                if f_path:
+                    f_path_clean = f_path.replace(f"gs://{bucket}/", "").lstrip("/")
+                    return read_parquet_file(f_path_clean)
+            
+            return empty_result
+
         # Optimized approach: Follow metadata -> snapshot -> manifest -> data file
         # This avoids listing the entire data directory which can be very slow
         
@@ -968,17 +1146,19 @@ def get_sample_data(bucket: str, path: str, limit: int = 100, project_id: Option
         try:
             metadata_dict, _, _ = read_iceberg_metadata_manual(bucket, path, project_id, token)
             
-            # 2. Get current snapshot
-            current_snapshot_id = metadata_dict.get("current-snapshot-id")
-            snapshots = metadata_dict.get("snapshots", [])
-            current_snapshot = next((s for s in snapshots if s.get("snapshot-id") == current_snapshot_id), None)
+            # 2. Get target snapshot
+            target_snapshot = None
+            if snapshot_id:
+                snapshots = metadata_dict.get("snapshots", [])
+                target_snapshot = next((s for s in snapshots if str(s.get("snapshot-id")) == str(snapshot_id)), None)
+            else:
+                current_snapshot_id = metadata_dict.get("current-snapshot-id")
+                snapshots = metadata_dict.get("snapshots", [])
+                target_snapshot = next((s for s in snapshots if s.get("snapshot-id") == current_snapshot_id), None)
             
-            if current_snapshot:
-                manifest_list = current_snapshot.get("manifest-list")
+            if target_snapshot:
+                manifest_list = target_snapshot.get("manifest-list")
                 if manifest_list:
-                    client = get_storage_client(project_id=project_id, token=token)
-                    bucket_obj = client.bucket(bucket)
-                    
                     # Parse manifest list
                     manifest_list_path = manifest_list.replace(f"gs://{bucket}/", "").lstrip("/")
                     blob = bucket_obj.blob(manifest_list_path)
@@ -994,11 +1174,11 @@ def get_sample_data(bucket: str, path: str, limit: int = 100, project_id: Option
                     # 3. Pick first manifest
                     if manifest_list_data:
                         first_manifest_entry = manifest_list_data[0]
-                        manifest_path = first_manifest_entry.get("manifest_path")
+                        m_path = first_manifest_entry.get("manifest_path")
                         
-                        if manifest_path:
-                            manifest_path_clean = manifest_path.replace(f"gs://{bucket}/", "").lstrip("/")
-                            blob = bucket_obj.blob(manifest_path_clean)
+                        if m_path:
+                            m_path_clean = m_path.replace(f"gs://{bucket}/", "").lstrip("/")
+                            blob = bucket_obj.blob(m_path_clean)
                             content = blob.download_as_bytes()
                             
                             manifest_data = []
@@ -1006,48 +1186,65 @@ def get_sample_data(bucket: str, path: str, limit: int = 100, project_id: Option
                                 manifest_bytes_io = BytesIO(content)
                                 manifest_data = list(fastavro.reader(manifest_bytes_io))
                             
-                            # 4. Pick first data file
+                            # 4. Iterate through data files until limit is reached
+                            all_rows = []
+                            all_columns = []
+                            files_read_count = 0
+                            
+                            # Get all data files from the manifest
+                            data_files_list = []
                             if manifest_data:
-                                first_entry = manifest_data[0]
-                                data_file = first_entry.get("data_file") or first_entry
-                                file_path = data_file.get("file_path") or data_file.get("filePath")
+                                for entry in manifest_data:
+                                    d_file = entry.get("data_file") or entry
+                                    f_p = d_file.get("file_path") or d_file.get("filePath")
+                                    if f_p:
+                                        data_files_list.append(f_p)
+                            
+                            # Iterate and read
+                            files_attempted = 0
+                            MAX_FILES_TO_ATTEMPT = 10
+                            
+                            for f_path in data_files_list:
+                                if len(all_rows) >= limit:
+                                    break
                                 
-                                if file_path:
-                                    file_path_clean = file_path.replace(f"gs://{bucket}/", "").lstrip("/")
-                                    blob = bucket_obj.blob(file_path_clean)
+                                if files_attempted >= MAX_FILES_TO_ATTEMPT:
+                                    print(f"Reached maximum file attempt limit ({MAX_FILES_TO_ATTEMPT}) without satisfying row limit")
+                                    break
                                     
-                                    # Download file (full file for now, assuming parquet files are reasonably sized chunks)
-                                    # For very large files, we might want to use range requests, but Parquet footer is at the end.
-                                    content = blob.download_as_bytes()
+                                files_attempted += 1
                                     
-                                    import pandas as pd
-                                    from io import BytesIO
-                                    df = pd.read_parquet(BytesIO(content))
-                                    
-                                    # Limit and convert
-                                    df_head = df.head(limit)
-                                    
-                                    # Handle timestamps
-                                    for col in df_head.columns:
-                                        if pd.api.types.is_datetime64_any_dtype(df_head[col]):
-                                            df_head[col] = df_head[col].dt.strftime('%Y-%m-%d %H:%M:%S')
-                                    
-                                    rows = df_head.to_dict(orient='records')
-                                    columns = list(df_head.columns)
-                                    
-                                    return {
-                                        "rows": rows,
-                                        "columns": columns,
-                                        "totalRows": len(rows),
-                                        "filesRead": 1,
-                                        "message": None
-                                    }
+                                f_path_clean = f_path.replace(f"gs://{bucket}/", "").lstrip("/")
+                                try:
+                                    result = read_parquet_file(f_path_clean)
+                                    if result and result.get("rows"):
+                                        new_rows = result["rows"]
+                                        # Calculate how many we need
+                                        needed = limit - len(all_rows)
+                                        all_rows.extend(new_rows[:needed])
+                                        if not all_columns and result.get("columns"):
+                                            all_columns = result["columns"]
+                                        files_read_count += 1
+                                except Exception as read_err:
+                                    print(f"Error reading file {f_path_clean}: {read_err}")
+                                    continue
+                            
+                            if all_rows:
+                                return {
+                                    "rows": all_rows,
+                                    "columns": all_columns,
+                                    "totalRows": len(all_rows),
+                                    "filesRead": files_read_count,
+                                    "message": None
+                                }
         except Exception as e:
             print(f"Optimized sample fetch failed: {e}")
-            # Fall through to fallback methods
+            # Fall through to fallback methods only if no specific target was requested
+            if snapshot_id:
+                return empty_result
         
-        # Fallback 1: PyIceberg (if optimized failed)
-        if PYICEBERG_AVAILABLE:
+        # Fallback 1: PyIceberg (if optimized failed AND no specific target requested)
+        if PYICEBERG_AVAILABLE and not snapshot_id:
             try:
                 normalized_path = path.strip("/")
                 metadata_dict, metadata_location, _ = read_iceberg_metadata_manual(bucket, path, project_id, token)
@@ -1092,57 +1289,66 @@ def get_sample_data(bucket: str, path: str, limit: int = 100, project_id: Option
             except Exception as e:
                 print(f"PyIceberg sample failed: {e}")
 
-        # Fallback 2: Manual listing (slowest)
-        try:
-            import pandas as pd
-            client = get_storage_client(project_id=project_id, token=token)
-            bucket_obj = client.bucket(bucket)
-            normalized_path = path.strip("/")
-            
-            prefixes = [f"{normalized_path}/data/", f"{normalized_path}/"]
-            parquet_file = None
-            for prefix in prefixes:
-                blobs = bucket_obj.list_blobs(prefix=prefix, max_results=50)
-                for blob in blobs:
-                    if blob.name.endswith(".parquet"):
-                        parquet_file = blob
+        # Fallback 2: Manual listing (slowest) - only if no specific target
+        if not snapshot_id:
+            try:
+                import pandas as pd
+                client = get_storage_client(project_id=project_id, token=token)
+                bucket_obj = client.bucket(bucket)
+                normalized_path = path.strip("/")
+                
+                prefixes = [f"{normalized_path}/data/", f"{normalized_path}/"]
+                parquet_file = None
+                for prefix in prefixes:
+                    blobs = bucket_obj.list_blobs(prefix=prefix, max_results=50)
+                    for blob in blobs:
+                        if blob.name.endswith(".parquet"):
+                            parquet_file = blob
+                            break
+                    if parquet_file:
                         break
-                if parquet_file:
-                    break
-            
-            if not parquet_file:
+                
+                if not parquet_file:
+                    return empty_result
+                
+                return read_parquet_file(parquet_file.name)
+                
+            except ImportError:
+                print("pandas/pyarrow not available for manual sample")
                 return empty_result
-            
-            from io import BytesIO
-            content = parquet_file.download_as_bytes()
-            df = pd.read_parquet(BytesIO(content))
-            df_head = df.head(limit)
-            
-            for col in df_head.columns:
-                if pd.api.types.is_datetime64_any_dtype(df_head[col]):
-                    df_head[col] = df_head[col].dt.strftime('%Y-%m-%d %H:%M:%S')
-            
-            rows = df_head.to_dict(orient='records')
-            columns = list(df_head.columns)
-            
-            return {
-                "rows": rows,
-                "columns": columns,
-                "totalRows": len(rows),
-                "filesRead": 1,
-                "message": None
-            }
-            
-        except ImportError:
-            print("pandas/pyarrow not available for manual sample")
-            return empty_result
-        except Exception as e:
-            print(f"Manual sample failed: {e}")
-            return empty_result
+            except Exception as e:
+                print(f"Manual sample failed: {e}")
+                return empty_result
             
     except Exception as e:
         print(f"Get sample data failed: {e}")
         return empty_result
+
+def get_manual_data_files(bucket: str, path: str, metadata: Dict[str, Any], project_id: Optional[str] = None, token: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Helper to get data files from current snapshot using manual parsing"""
+    try:
+        current_snapshot_id = metadata.get("current-snapshot-id")
+        if not current_snapshot_id:
+            return []
+            
+        snapshots = metadata.get("snapshots", [])
+        current_snapshot = next((s for s in snapshots if s.get("snapshot-id") == current_snapshot_id), None)
+        
+        if not current_snapshot:
+            return []
+            
+        manifest_list = current_snapshot.get("manifest-list")
+        if not manifest_list:
+            return []
+            
+        # Get data files with a limit to avoid performance issues
+        # We'll fetch up to 100 files which should be enough for the graph
+        files = get_manifest_files(bucket, path, manifest_list, project_id, token)
+        return files[:100]
+    except Exception as e:
+        print(f"Error getting manual data files: {e}")
+        return []
+
 
 def compare_snapshots(bucket: str, path: str, snapshot_id_1: str, snapshot_id_2: str, project_id: Optional[str] = None, token: Optional[str] = None) -> Dict[str, Any]:
     """Compare two snapshots and return the differences"""
