@@ -43,4 +43,24 @@ describe('LoginPage', () => {
     expect(button).toBeDisabled();
     expect(screen.queryByText('Continue with Google')).not.toBeInTheDocument();
   });
+
+  it('shows Dev Login button in development mode', () => {
+    const originalEnv = process.env;
+    process.env = { ...originalEnv, NODE_ENV: 'development' };
+
+    render(<LoginPage />);
+    expect(screen.getByText('Dev Login (No Auth)')).toBeInTheDocument();
+
+    process.env = originalEnv;
+  });
+
+  it('hides Dev Login button in production mode', () => {
+    const originalEnv = process.env;
+    process.env = { ...originalEnv, NODE_ENV: 'production' };
+
+    render(<LoginPage />);
+    expect(screen.queryByText('Dev Login (No Auth)')).not.toBeInTheDocument();
+
+    process.env = originalEnv;
+  });
 });

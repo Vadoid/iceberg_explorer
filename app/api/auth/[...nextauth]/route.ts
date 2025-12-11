@@ -1,5 +1,6 @@
 import NextAuth from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
+import CredentialsProvider from "next-auth/providers/credentials"
 
 const handler = NextAuth({
   providers: [
@@ -15,6 +16,22 @@ const handler = NextAuth({
         }
       }
     }),
+    CredentialsProvider({
+      name: 'Local Development',
+      credentials: {},
+      async authorize(credentials: any, req: any) {
+        // Only allow in development
+        if (process.env.NODE_ENV === 'development') {
+          return {
+            id: 'dev-user',
+            name: 'Local Developer',
+            email: 'dev@localhost',
+            image: null
+          }
+        }
+        return null
+      }
+    })
   ],
   callbacks: {
     async jwt({ token, account }) {

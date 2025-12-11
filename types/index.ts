@@ -142,3 +142,18 @@ export interface SnapshotComparison {
   };
 }
 
+
+export interface BigQueryDataset {
+  dataset_id: string;
+  project: string;
+  full_dataset_id: string;
+  labels: Record<string, string>;
+}
+
+export interface BigQueryTable {
+  table_id: string;
+  table_type: string;
+  full_table_id: string;
+  created: string | null;
+  expires: string | null;
+}

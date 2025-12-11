@@ -27,7 +27,8 @@ const mockTableInfo = {
   name: 'test_table',
   path: 'warehouse/test_table',
   bucket: 'test-bucket',
-  projectId: 'test-project'
+  projectId: 'test-project',
+  location: 'gs://test-bucket/warehouse/test_table'
 }
 
 const mockMetadata = {
@@ -61,14 +62,25 @@ describe('TableAnalyzer', () => {
     // Delay resolution to catch loading state
     mockedApi.get.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ data: mockMetadata }), 100)))
 
-    render(<TableAnalyzer tableInfo={mockTableInfo} />)
+    const { rerender } = render(<TableAnalyzer tableInfo={mockTableInfo} />)
 
     // Check if refresh button is disabled (loading state)
     const refreshBtn = screen.getByTitle('Refresh metadata')
     expect(refreshBtn).toBeDisabled()
 
+    // Verify metadata view is NOT shown while loading
+    expect(screen.queryByTestId('metadata-view')).not.toBeInTheDocument()
+
     // Wait for loading to finish
     await waitFor(() => expect(screen.getByTestId('metadata-view')).toBeInTheDocument())
+
+    // Trigger another load (e.g. by changing tableInfo)
+    mockedApi.get.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ data: mockMetadata }), 100)))
+    rerender(<TableAnalyzer tableInfo={{ ...mockTableInfo, name: 'other_table' }} />)
+
+    // Verify metadata view is cleared immediately
+    expect(screen.queryByTestId('metadata-view')).not.toBeInTheDocument()
+    expect(screen.getByTitle('Refresh metadata')).toBeDisabled()
   })
 
   it('renders overview tab by default', async () => {

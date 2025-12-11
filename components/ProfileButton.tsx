@@ -54,7 +54,7 @@ export default function ProfileButton() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+        <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-[60] animate-in fade-in zoom-in-95 duration-100 origin-top-right">
           <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 mb-1">
             <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
               {session.user.name}

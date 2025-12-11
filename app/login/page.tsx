@@ -71,6 +71,18 @@ export default function LoginPage() {
                 </>
               )}
             </button>
+
+            {/* Dev Login Button - Only visible in development */}
+            {process.env.NODE_ENV === 'development' && (
+              <button
+                onClick={() => signIn('credentials', { callbackUrl: '/' })}
+                disabled={isLoading}
+                className="w-full flex items-center justify-center gap-3 bg-gray-800 hover:bg-gray-900 text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+              >
+                <div className="w-5 h-5 flex items-center justify-center text-lg">🛠️</div>
+                <span>Dev Login (No Auth)</span>
+              </button>
+            )}
           </div>
 
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700/50 text-center">

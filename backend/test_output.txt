@@ -1,0 +1,101 @@
+fastavro available, version: 1.12.1
+============================= test session starts ==============================
+platform linux -- Python 3.13.7, pytest-7.4.3, pluggy-1.6.0
+rootdir: /usr/local/google/home/vadimzaripov/Dev/iceberg_explorer/backend
+plugins: asyncio-0.21.1, cov-7.0.0, anyio-3.7.1
+asyncio: mode=Mode.STRICT
+collected 1 item
+
+tests/test_bigquery.py Warning: Error inspecting table test_table: 'str' object has no attribute 'isoformat'
+Response status: 200
+Response body: {'tables': []}
+F
+
+=================================== FAILURES ===================================
+__________________________ test_search_iceberg_tables __________________________
+
+client = <httpx.AsyncClient object at 0x7f49a7329550>
+
+    @pytest.mark.asyncio
+    async def test_search_iceberg_tables(client):
+        """Test search_iceberg_tables endpoint with mocked BigQuery client"""
+        project_id = "test-project"
+    
+        # Mock BigQuery Client and its methods
+        with patch("app.routers.bigquery.get_bigquery_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_get_client.return_value = mock_client
+    
+            # Mock datasets
+            mock_dataset = MagicMock()
+            mock_dataset.dataset_id = "test_dataset"
+            mock_client.list_datasets.return_value = [mock_dataset]
+    
+            # Mock tables
+            mock_table = MagicMock()
+            mock_table.table_id = "test_table"
+            mock_table.table_type = "EXTERNAL"
+            mock_table.full_table_id = "test-project.test_dataset.test_table"
+    
+            # Mock table list iterator
+            mock_client.list_tables.return_value = [mock_table]
+    
+            # Mock table details (get_table)
+            mock_table_details = MagicMock()
+            mock_table_details.table_type = "EXTERNAL"
+            mock_table_details.created = "2023-01-01T00:00:00Z"
+    
+            # Mock external configuration
+            mock_ext_config = MagicMock()
+            mock_ext_config.source_format = "ICEBERG"
+            mock_ext_config.source_uris = ["gs://bucket/path"]
+            mock_table_details.external_data_configuration = mock_ext_config
+    
+            mock_client.get_table.return_value = mock_table_details
+    
+            # Call the endpoint
+            response = await client.get(f"/api/backend/bigquery/search-iceberg?project_id={project_id}")
+    
+            # Verify response
+            print(f"Response status: {response.status_code}")
+            print(f"Response body: {response.json()}")
+            assert response.status_code == 200
+            data = response.json()
+            assert "tables" in data
+            tables = data["tables"]
+>           assert len(tables) == 1
+E           assert 0 == 1
+E            +  where 0 = len([])
+
+tests/test_bigquery.py:51: AssertionError
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: Type google._upb._message.MessageMapContainer uses PyType_Spec with a metaclass that has custom tp_new. This is deprecated and will no longer be allowed in Python 3.14.
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: Type google._upb._message.ScalarMapContainer uses PyType_Spec with a metaclass that has custom tp_new. This is deprecated and will no longer be allowed in Python 3.14.
+
+../.venv/lib/python3.13/site-packages/pyiceberg/table/metadata.py:248
+  /usr/local/google/home/vadimzaripov/Dev/iceberg_explorer/.venv/lib/python3.13/site-packages/pyiceberg/table/metadata.py:248: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+../.venv/lib/python3.13/site-packages/pyiceberg/table/metadata.py:372
+  /usr/local/google/home/vadimzaripov/Dev/iceberg_explorer/.venv/lib/python3.13/site-packages/pyiceberg/table/metadata.py:372: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+../.venv/lib/python3.13/site-packages/pyiceberg/table/metadata.py:376
+  /usr/local/google/home/vadimzaripov/Dev/iceberg_explorer/.venv/lib/python3.13/site-packages/pyiceberg/table/metadata.py:376: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+../.venv/lib/python3.13/site-packages/pyiceberg/table/metadata.py:380
+  /usr/local/google/home/vadimzaripov/Dev/iceberg_explorer/.venv/lib/python3.13/site-packages/pyiceberg/table/metadata.py:380: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+../.venv/lib/python3.13/site-packages/pyiceberg/table/metadata.py:384
+  /usr/local/google/home/vadimzaripov/Dev/iceberg_explorer/.venv/lib/python3.13/site-packages/pyiceberg/table/metadata.py:384: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_bigquery.py::test_search_iceberg_tables - assert 0 == 1
+======================== 1 failed, 7 warnings in 0.16s =========================

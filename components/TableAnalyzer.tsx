@@ -31,6 +31,7 @@ export default function TableAnalyzer({ tableInfo }: TableAnalyzerProps) {
   const loadTableMetadata = async () => {
     try {
       setLoading(true);
+      setMetadata(null); // Clear previous data to show loading state
       setError(null);
       const params: { bucket: string; path: string; project_id?: string } = {
         bucket: tableInfo.bucket,

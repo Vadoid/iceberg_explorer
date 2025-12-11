@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Maximize, Minimize, ZoomIn, ZoomOut } from 'lucide-react';
 
 interface GraphData {
@@ -66,6 +66,8 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
   const [dragging, setDragging] = useState(false);
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 });
   const [showHistory, setShowHistory] = useState(false);
+
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Build the tree structure from flat data
   const rootNode = useMemo(() => {
@@ -238,12 +240,12 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
 
   // Center the tree initially
   useEffect(() => {
-    if (layoutNodes.length > 0) {
+    if (layoutNodes.length > 0 && containerRef.current) {
       const xs = layoutNodes.map(n => n.x || 0);
       const minX = Math.min(...xs);
       const maxX = Math.max(...xs);
       const treeWidth = maxX - minX + NODE_WIDTH;
-      const containerWidth = window.innerWidth; // Approximate
+      const containerWidth = containerRef.current.clientWidth;
       
       setTransform(prev => ({
         ...prev,
@@ -366,6 +368,7 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
 
   return (
     <div
+      ref={containerRef}
       className={`relative w-full h-full overflow-hidden bg-slate-50 text-slate-900 ${className}`}
       style={{
         backgroundImage: 'linear-gradient(#e2e8f0 1px, transparent 1px), linear-gradient(90deg, #e2e8f0 1px, transparent 1px)',
@@ -377,15 +380,25 @@ export default function IcebergTree({ data, className }: IcebergTreeProps) {
         <button
           onClick={() => setShowHistory(!showHistory)}
           className={`p-2 rounded shadow text-xs font-medium transition-colors border ${showHistory
-              ? 'bg-blue-100 text-blue-700 border-blue-200'
+            ? 'bg-blue-100 text-blue-700 border-blue-200' 
               : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
             }`}
         >
           {showHistory ? 'Hide History' : 'Show History'}
         </button>
         <div className="w-px h-8 bg-slate-300 mx-1" />
-        <button onClick={expandAll} className="p-2 bg-white text-slate-700 border border-slate-200 rounded shadow hover:bg-slate-50 text-xs font-medium">Expand All</button>
-        <button onClick={collapseAll} className="p-2 bg-white text-slate-700 border border-slate-200 rounded shadow hover:bg-slate-50 text-xs font-medium">Collapse All</button>
+        <button
+          onClick={() => {
+            if (expandedIds.size > 1) {
+              collapseAll();
+            } else {
+              expandAll();
+            }
+          }}
+          className="p-2 bg-white text-slate-700 border border-slate-200 rounded shadow hover:bg-slate-50 text-xs font-medium min-w-[80px]"
+        >
+          {expandedIds.size > 1 ? 'Collapse All' : 'Expand All'}
+        </button>
         <div className="w-px h-8 bg-slate-300 mx-1" />
         <button onClick={() => setTransform(t => ({ ...t, scale: t.scale * 1.2 }))} className="p-2 bg-white text-slate-700 border border-slate-200 rounded shadow hover:bg-slate-50"><ZoomIn size={16} /></button>
         <button onClick={() => setTransform(t => ({ ...t, scale: t.scale / 1.2 }))} className="p-2 bg-white text-slate-700 border border-slate-200 rounded shadow hover:bg-slate-50"><ZoomOut size={16} /></button>

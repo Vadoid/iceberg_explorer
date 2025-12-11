@@ -1,35 +1,27 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Folder, File, Loader2, Search, Database } from 'lucide-react';
+import { Folder, Loader2, Search, Database, Star } from 'lucide-react';
 import { TableInfo } from '@/types';
 import api from '@/lib/api';
 
 interface BucketBrowserProps {
+  projectId: string;
   onTableSelect: (table: TableInfo) => void;
-  onBucketChange: (bucket: string) => void;
-  onFolderChange: (folder: string) => void;
-}
-
-interface Project {
-  id: string;
-  name: string;
+  onToggleFavorite: (table: TableInfo) => void;
+  favorites: TableInfo[];
 }
 
 export default function BucketBrowser({
+  projectId,
   onTableSelect,
-  onBucketChange,
-  onFolderChange,
+  onToggleFavorite,
+  favorites,
 }: BucketBrowserProps) {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>('');
-  const [manualProjectId, setManualProjectId] = useState<string>('');
-  const [useManualProject, setUseManualProject] = useState(false);
   const [buckets, setBuckets] = useState<string[]>([]);
   const [selectedBucket, setSelectedBucket] = useState<string>('');
   const [currentPath, setCurrentPath] = useState<string>('');
   const [folders, setFolders] = useState<string[]>([]);
-  const [tables, setTables] = useState<TableInfo[]>([]);
   const [items, setItems] = useState<Array<{name: string; type: string; path: string; table?: TableInfo}>>([]);
   const [discoveredTables, setDiscoveredTables] = useState<TableInfo[]>([]);
   const [showDiscovered, setShowDiscovered] = useState(false);
@@ -40,84 +32,24 @@ export default function BucketBrowser({
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    loadProjects();
-  }, []);
-
-  useEffect(() => {
-    const projectToUse = useManualProject ? manualProjectId : selectedProject;
-    if (projectToUse) {
+    if (projectId) {
       loadBuckets();
     } else {
       setBuckets([]);
       setSelectedBucket('');
     }
-  }, [selectedProject, manualProjectId, useManualProject]);
-
-  const loadProjects = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await api.get('/projects');
-      const projectsList = response.data.projects || [];
-      setProjects(projectsList);
-      
-      // Log additional info if available
-      if (response.data.total_found !== undefined) {
-        console.log(`Found ${response.data.total_found} total projects, ${response.data.active_count || projectsList.length} active`);
-      }
-      if (response.data.errors) {
-        console.warn('Project loading errors:', response.data.errors);
-      }
-      
-      // Auto-select first project if available
-      if (projectsList.length > 0 && !selectedProject) {
-        setSelectedProject(projectsList[0].id);
-      }
-    } catch (err) {
-      let errorMsg = 'Failed to load projects';
-      if (err && typeof err === 'object' && 'response' in err) {
-        const axiosError = err as { response?: { status?: number; data?: { detail?: string; error?: string } } };
-        if (axiosError.response?.status === 404) {
-          errorMsg = 'Backend server not found (404). Make sure the backend is running on port 8000:\n\ncd backend && uvicorn main:app --reload';
-        } else if (axiosError.response?.status === 503) {
-          errorMsg = axiosError.response.data?.detail || 'Backend server is not running. Start it with: cd backend && uvicorn main:app --reload';
-        } else if (axiosError.response?.data?.detail) {
-          errorMsg = axiosError.response.data.detail;
-        } else if (axiosError.response?.data?.error) {
-          errorMsg = axiosError.response.data.error;
-        } else {
-          errorMsg = `Request failed with status ${axiosError.response?.status || 'unknown'}`;
-        }
-      } else if (err instanceof Error) {
-        if (err.message.includes('Network Error') || err.message.includes('ECONNREFUSED')) {
-          errorMsg = 'Cannot connect to backend server. Make sure it\'s running on port 8000:\n\ncd backend && uvicorn main:app --reload';
-        } else {
-          errorMsg = err.message;
-        }
-      }
-      setError(`${errorMsg}\n\nAlso ensure:\n- gcloud auth application-default login\n- gcloud auth application-default set-quota-project YOUR_PROJECT_ID`);
-      console.error('Error loading projects:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [projectId]);
 
   const loadBuckets = async () => {
-    const projectToUse = useManualProject ? manualProjectId : selectedProject;
-    if (!projectToUse) {
-      setBuckets([]);
-      setLoadingBuckets(false);
-      return;
-    }
+    if (!projectId) return;
     
     try {
       setLoadingBuckets(true);
       setError(null);
       const response = await api.get('/buckets', {
-        params: { project_id: projectToUse },
+        params: { project_id: projectId },
       });
       setBuckets(response.data.buckets || []);
-      // Clear selected bucket when project changes
       setSelectedBucket('');
       setCurrentPath('');
     } catch (err) {
@@ -138,21 +70,17 @@ export default function BucketBrowser({
   };
 
   const loadFolderContents = async (bucket: string, path: string = '') => {
-    const projectToUse = useManualProject ? manualProjectId : selectedProject;
-    if (!projectToUse) return;
+    if (!projectId) return;
     
     try {
       setLoading(true);
       setError(null);
       const response = await api.get('/browse', {
-        params: { bucket, path, project_id: projectToUse },
+        params: { bucket, path, project_id: projectId },
       });
       setFolders(response.data.folders || []);
-      setTables(response.data.tables || []);
       setItems(response.data.items || []);
       setCurrentPath(path);
-      onBucketChange(bucket);
-      onFolderChange(path);
     } catch (err) {
       setError('Failed to load folder contents.');
       console.error('Error loading folder:', err);
@@ -175,31 +103,26 @@ export default function BucketBrowser({
     onTableSelect(table);
   };
 
-  const handleItemClick = (item: {name: string; type: string; path: string; table?: TableInfo}, event?: React.MouseEvent) => {
-    // If it's an Iceberg table, always select it for exploration
+  const handleItemClick = (item: { name: string; type: string; path: string; table?: TableInfo }, event?: React.MouseEvent) => {
     if (item.type === 'iceberg_table' && item.table) {
-      // Clicking an Iceberg table moves it to explore
-      // Ensure project ID is set
       const tableWithProject = {
         ...item.table,
-        projectId: item.table.projectId || currentProject,
+        projectId: item.table.projectId || projectId,
       };
       handleTableClick(tableWithProject);
     } else if (item.type === 'folder') {
-      // Check if this folder might be an Iceberg table (has metadata subfolder)
-      // For now, allow navigation - user can discover tables to find them
       handleFolderClick(item.name);
     }
   };
 
   const handleDiscoverTables = async () => {
-    if (!selectedBucket || !currentProject) return;
+    if (!selectedBucket || !projectId) return;
     
     try {
       setDiscovering(true);
       setError(null);
       const response = await api.get('/discover', {
-        params: { bucket: selectedBucket, project_id: currentProject },
+        params: { bucket: selectedBucket, project_id: projectId },
       });
       const tables = response.data.tables || [];
       setDiscoveredTables(tables);
@@ -223,109 +146,48 @@ export default function BucketBrowser({
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const currentProject = useManualProject ? manualProjectId : selectedProject;
+  const isFavorite = (table: TableInfo) => {
+    return favorites.some(f => f.location === table.location);
+  };
+
+  if (!projectId) {
+    return (
+      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+        Please select a project to browse buckets.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          GCP Project
-        </label>
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 mb-2">
-            <input
-              type="checkbox"
-              id="useManualProject"
-              checked={useManualProject}
-              onChange={(e) => {
-                setUseManualProject(e.target.checked);
-                if (!e.target.checked) {
-                  setManualProjectId('');
-                }
-              }}
-              className="w-4 h-4"
-            />
-            <label htmlFor="useManualProject" className="text-sm text-gray-600 dark:text-gray-400">
-              Enter project ID manually
-            </label>
-          </div>
-          
-          {useManualProject ? (
-            <input
-              type="text"
-              value={manualProjectId}
-              onChange={(e) => setManualProjectId(e.target.value)}
-              placeholder="Enter GCP project ID..."
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              disabled={loading}
-            />
-          ) : (
-            <select
-              value={selectedProject}
-              onChange={(e) => setSelectedProject(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              disabled={loading}
-            >
-              <option value="">Select a project...</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name} ({project.id})
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-        {projects.length > 0 && !useManualProject && (
-          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            <p>Found {projects.length} project{projects.length !== 1 ? 's' : ''}.</p>
-            {projects.length === 1 && (
-              <p className="mt-1">If you have access to more projects, check Resource Manager API permissions or enter project ID manually.</p>
-            )}
-          </div>
-        )}
-      </div>
-
       {!selectedBucket ? (
         <div>
-          <h3 className="text-lg font-medium mb-3 text-gray-700 dark:text-gray-300">
-            Select a GCS Bucket
+          <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+            Buckets
           </h3>
           {loadingBuckets ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="animate-spin h-6 w-6 text-blue-500" />
-              <span className="ml-2 text-gray-600 dark:text-gray-400">Searching for buckets...</span>
             </div>
           ) : error ? (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-400">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-400 text-sm">
                 <p>{error}</p>
-                {(error.includes('Authentication failed') || error.includes('sign in')) && (
-                  <button
-                    onClick={() => window.location.href = '/login'}
-                    className="mt-2 px-4 py-2 bg-red-100 dark:bg-red-800 hover:bg-red-200 dark:hover:bg-red-700 text-red-800 dark:text-red-100 rounded-md text-sm font-medium transition-colors"
-                  >
-                    Sign In
-                  </button>
-                )}
             </div>
           ) : (
-                <div className="space-y-2">
-              {!currentProject ? (
-                <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-                  Please select a GCP project first.
-                </p>
-              ) : buckets.length === 0 ? (
-                <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-                  No buckets found in this project. Check your GCS credentials.
+                <div className="space-y-1">
+                  {buckets.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                      No buckets found.
                 </p>
               ) : (
                 buckets.map((bucket) => (
                   <button
                     key={bucket}
                     onClick={() => handleBucketSelect(bucket)}
-                    className="w-full text-left px-4 py-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors flex items-center gap-2"
+                    className="w-full text-left px-3 py-2 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors flex items-center gap-2 group"
                   >
-                    <Folder className="h-5 w-5 text-blue-500" />
-                    <span className="font-medium text-gray-700 dark:text-gray-300">
+                    <Folder className="h-4 w-4 text-blue-500 group-hover:text-blue-600" />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
                       {bucket}
                     </span>
                   </button>
@@ -338,46 +200,51 @@ export default function BucketBrowser({
         <div>
             <div className="flex flex-col gap-3 mb-4">
               <div className="flex items-center gap-2">
-                {currentPath && (
-                  <button
-                    onClick={navigateUp}
-                    className="px-3 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded text-sm flex-shrink-0"
-                  >
-                    ← Up
-                  </button>
-                )}
+                <button
+                  onClick={() => {
+                    if (currentPath) {
+                      navigateUp();
+                    } else {
+                      setSelectedBucket('');
+                    }
+                  }}
+                  className="px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-xs text-gray-500 dark:text-gray-400 flex-shrink-0"
+                >
+                  ← Back
+                </button>
                 <div className="flex-1 text-sm text-gray-600 dark:text-gray-400 min-w-0 break-all">
                   <span className="font-medium">{selectedBucket}</span>
                   {currentPath && <span> / {currentPath}</span>}
                 </div>
             </div>
+
             <button
               onClick={handleDiscoverTables}
-              disabled={discovering || !selectedBucket}
-                className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+                disabled={discovering}
+                className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition-colors"
             >
               {discovering ? (
                 <>
-                  <Loader2 className="animate-spin h-4 w-4" />
+                    <Loader2 className="animate-spin h-3 w-3" />
                   Discovering...
                 </>
               ) : (
                 <>
-                  <Search className="h-4 w-4" />
-                  Discover Iceberg Tables
+                      <Search className="h-3 w-3" />
+                      Scan for Tables
                 </>
               )}
             </button>
           </div>
 
           <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search folders and tables..."
+                placeholder="Filter..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                className="w-full pl-9 pr-4 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -386,98 +253,117 @@ export default function BucketBrowser({
               <Loader2 className="animate-spin h-6 w-6 text-blue-500" />
             </div>
           ) : error ? (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-400">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-400 text-sm">
                   <p>{error}</p>
-                  {(error.includes('Authentication failed') || error.includes('sign in')) && (
-                    <button
-                      onClick={() => window.location.href = '/login'}
-                      className="mt-2 px-4 py-2 bg-red-100 dark:bg-red-800 hover:bg-red-200 dark:hover:bg-red-700 text-red-800 dark:text-red-100 rounded-md text-sm font-medium transition-colors"
-                    >
-                      Sign In
-                    </button>
-                  )}
             </div>
           ) : (
                   <div className="space-y-4">
               {showDiscovered && discoveredTables.length > 0 && (
-                <div className="mb-4 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-indigo-900 dark:text-indigo-200">
-                      Discovered {discoveredTables.length} Iceberg Table{discoveredTables.length !== 1 ? 's' : ''}
+                      <div className="mb-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-100 dark:border-indigo-800">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-semibold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider">
+                            Discovered ({discoveredTables.length})
                     </h4>
                     <button
                       onClick={() => setShowDiscovered(false)}
-                      className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200"
+                            className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200"
                     >
                       Hide
                     </button>
                   </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
                     {discoveredTables.map((table) => (
-                      <button
+                      <div
                         key={table.location}
-                        onClick={() => {
-                          const tableWithProject = {
-                            ...table,
-                            projectId: table.projectId || currentProject,
-                          };
-                          handleTableClick(tableWithProject);
-                        }}
-                        className="w-full text-left px-4 py-2 bg-white dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors flex items-center gap-2 border border-indigo-200 dark:border-indigo-700"
+                        className="flex items-center gap-2 group"
                       >
-                        <Database className="h-4 w-4 text-indigo-500" />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-700 dark:text-gray-300 truncate">
-                            {table.name}
+                        <button
+                          onClick={() => {
+                            const tableWithProject = {
+                              ...table,
+                              projectId: table.projectId || projectId,
+                            };
+                            handleTableClick(tableWithProject);
+                          }}
+                          className="flex-1 text-left px-2 py-1.5 rounded hover:bg-white dark:hover:bg-gray-800 transition-colors flex items-center gap-2 min-w-0"
+                        >
+                          <Database className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
+                              {table.name}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate" title={table.location}>
+                              {table.location}
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            {table.path}
-                          </div>
-                        </div>
-                      </button>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleFavorite({ ...table, projectId: projectId });
+                          }}
+                          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Star
+                            className={`h-3.5 w-3.5 ${isFavorite(table) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-400'}`}
+                          />
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
               )}
               
               {filteredItems.length > 0 ? (
-                <div className="space-y-1">
+                      <div className="space-y-0.5">
                   {filteredItems.map((item, idx) => (
-                    <button
+                    <div
                       key={`${item.path}-${idx}`}
-                      onClick={() => handleItemClick(item)}
-                      className={`w-full text-left px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-                        item.type === 'iceberg_table'
-                          ? 'bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800'
-                          : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'
-                      }`}
+                      className="flex items-center gap-1 group"
                     >
-                      {item.type === 'iceberg_table' ? (
-                        <>
-                          <Database className="h-4 w-4 text-indigo-500" />
-                          <span className="text-gray-700 dark:text-gray-300 font-medium">
-                            {item.name}
-                          </span>
-                          <span className="ml-auto text-xs bg-indigo-200 dark:bg-indigo-800 text-indigo-800 dark:text-indigo-200 px-2 py-1 rounded">
+                      <button
+                        onClick={() => handleItemClick(item)}
+                        className={`flex-1 text-left px-2 py-1.5 rounded transition-colors flex items-center gap-2 min-w-0 ${item.type === 'iceberg_table'
+                          ? 'hover:bg-indigo-50 dark:hover:bg-indigo-900/20'
+                          : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                          }`}
+                      >
+                        {item.type === 'iceberg_table' ? (
+                          <Database className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" />
+                        ) : (
+                          <Folder className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                        )}
+                        <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                          {item.name}
+                        </span>
+                        {item.type === 'iceberg_table' && (
+                          <span className="ml-auto text-[10px] bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded">
                             Iceberg
                           </span>
-                        </>
-                      ) : (
-                        <>
-                          <Folder className="h-4 w-4 text-blue-500" />
-                          <span className="text-gray-700 dark:text-gray-300">
-                            {item.name}
-                          </span>
-                        </>
+                        )}
+                      </button>
+
+                      {item.type === 'iceberg_table' && item.table && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (item.table) {
+                              onToggleFavorite({ ...item.table, projectId: projectId });
+                            }
+                          }}
+                          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Star
+                            className={`h-3.5 w-3.5 ${isFavorite(item.table) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-400'}`}
+                          />
+                        </button>
                       )}
-                    </button>
+                    </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-                  {searchTerm
-                    ? 'No results found'
-                    : 'No folders or tables in this location'}
+                        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                          {searchTerm ? 'No results found' : 'Empty folder'}
                 </p>
               )}
             </div>

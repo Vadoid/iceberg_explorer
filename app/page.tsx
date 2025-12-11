@@ -1,15 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import BucketBrowser from '@/components/BucketBrowser';
 import TableAnalyzer from '@/components/TableAnalyzer';
 import ProfileButton from '@/components/ProfileButton';
+import Sidebar from '@/components/Sidebar';
 import { TableInfo } from '@/types';
 
 export default function Home() {
   const [selectedTable, setSelectedTable] = useState<TableInfo | null>(null);
-  const [bucketName, setBucketName] = useState<string>('');
-  const [folderPath, setFolderPath] = useState<string>('');
   const [sidebarWidth, setSidebarWidth] = useState(320); // Default 320px
   const [isResizing, setIsResizing] = useState(false);
 
@@ -38,31 +36,16 @@ export default function Home() {
       onMouseUp={stopResizing}
       onMouseLeave={stopResizing}
     >
-      {/* Sidebar */}
-      <aside
-        className="flex-shrink-0 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col relative"
-        style={{ width: sidebarWidth }}
-      >
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <span>🧊</span> Iceberg Explorer
-          </h1>
-        </div>
+      <Sidebar
+        width={sidebarWidth}
+        onTableSelect={setSelectedTable} 
+      />
 
-        <div className="flex-1 overflow-y-auto p-4">
-          <BucketBrowser
-            onTableSelect={setSelectedTable}
-            onBucketChange={setBucketName}
-            onFolderChange={setFolderPath}
-          />
-        </div>
-
-        {/* Resize Handle */}
-        <div
-          className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-500 transition-colors z-10"
-          onMouseDown={startResizing}
-        />
-      </aside>
+      {/* Resize Handle */}
+      <div
+        className="w-1 h-full cursor-col-resize hover:bg-blue-500 transition-colors z-10 flex-shrink-0"
+        onMouseDown={startResizing}
+      />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">

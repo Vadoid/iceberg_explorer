@@ -59,6 +59,7 @@ export default function IcebergGraphView({ tableInfo }: IcebergGraphViewProps) {
 
   const loadGraphData = async () => {
     setLoading(true);
+    setGraphData(null);
     setError(null);
     try {
       // Use the centralized API client

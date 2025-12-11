@@ -5,7 +5,7 @@ Handles GCS bucket access and Iceberg table analysis
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import projects, buckets, analyze
+from app.routers import projects, buckets, analyze, browse, discover, bigquery
 
 app = FastAPI(title="Iceberg Explorer API")
 
@@ -20,11 +20,14 @@ app.add_middleware(
 
 # Include routers
 # Include routers with API prefix to match dispatch.yaml routing
-API_PREFIX = "/api/backend"
+# API_PREFIX = "/api/backend" # Removed as per instruction to use "/api" directly
 
-app.include_router(projects.router, prefix=API_PREFIX, tags=["projects"])
-app.include_router(buckets.router, prefix=API_PREFIX, tags=["buckets"])
-app.include_router(analyze.router, prefix=API_PREFIX, tags=["analyze"])
+app.include_router(projects.router, prefix="/api/backend", tags=["projects"])
+app.include_router(buckets.router, prefix="/api/backend", tags=["buckets"])
+app.include_router(browse.router, prefix="/api/backend", tags=["browse"])
+app.include_router(analyze.router, prefix="/api/backend", tags=["analyze"])
+app.include_router(discover.router, prefix="/api/backend", tags=["discover"])
+app.include_router(bigquery.router, prefix="/api/backend", tags=["bigquery"])
 
 from fastapi import Request
 from fastapi.responses import JSONResponse

@@ -2,6 +2,7 @@ fastapi==0.104.1
 uvicorn[standard]==0.24.0
 google-cloud-storage==2.14.0
 google-cloud-resource-manager==1.10.0
+google-cloud-bigquery
 python-multipart==0.0.6
 numpy>=1.21.0
 pyarrow>=10.0.0

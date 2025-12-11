@@ -2,6 +2,8 @@
 
 ![Iceberg Explorer](explorer.png)
 
+**Deployed Application**: [https://iceberg-explore.uc.r.appspot.com/](https://iceberg-explore.uc.r.appspot.com/)
+
 A comprehensive, user-friendly web interface for exploring and analyzing Apache Iceberg tables stored in Google Cloud Storage (GCS). Browse buckets, analyze table metadata, view sample data, and visualize table architecture with pixel-perfect diagrams.
 
 ## Features
@@ -13,9 +15,38 @@ A comprehensive, user-friendly web interface for exploring and analyzing Apache 
 - 📋 **Sample Data**: View sample rows from your Iceberg tables
 - 🔄 **Snapshot Comparison**: Compare snapshots to see what changed (like GitHub diff)
 - 🎯 **Table Discovery**: Automatically discover all Iceberg tables in a bucket
-- 📱 **Responsive UI**: Modern, user-friendly interface that works on all devices
+-  **Responsive UI**: Modern, user-friendly interface that works on all devices
 - 🔐 **Secure Authentication**: Google Sign-In integration with profile management
 - ☁️ **GCS Integration**: Seamless connection to Google Cloud Storage
+
+> **Note**: BigQuery Iceberg search support is implemented in the backend but currently disabled in the UI.
+
+## Usage Walkthrough
+
+### 1. Select a Project
+Upon logging in, use the project selector in the top-left corner of the Sidebar to choose the Google Cloud Project you want to explore. You can select from the dropdown list or enter a Project ID manually.
+
+### 2. Browse Storage
+The **Storage** tab allows you to navigate your GCS buckets.
+- Click on a bucket to expand it.
+- Navigate through folders to find your Iceberg tables.
+- Iceberg tables are automatically detected and marked with an icon.
+- Click on a table to load its metadata and visualization.
+
+### 3. Explore Table Details
+Once a table is selected, the main view provides several tabs:
+- **Graph**: A hierarchical visualization of the table's structure (Snapshots -> Manifest Lists -> Manifests -> Data Files).
+- **Metadata**: Detailed JSON view of the table's metadata, including schema, partition specs, and properties.
+- **Stats**: Visual charts showing file size distribution, partition counts, and other statistics.
+- **Partitions**: A list of all partitions in the table.
+- **Snapshots**: A history of table snapshots. Select two snapshots to compare them.
+- **Sample Data**: Preview actual data rows from the table.
+
+### 4. Compare Snapshots
+In the **Snapshots** tab:
+1. Select a "Base Snapshot" (the older version).
+2. Select a "Comparison Snapshot" (the newer version).
+3. Click "Compare" to see a diff of added, removed, and modified files, along with size and record count deltas.
 
 ## Prerequisites
 
@@ -26,8 +57,9 @@ A comprehensive, user-friendly web interface for exploring and analyzing Apache 
 - **Google Cloud Project** with appropriate permissions:
   - Storage Object Viewer/Admin
   - Resource Manager Viewer (for project listing)
+  - BigQuery Data Viewer (for BigQuery search features)
 
-## Setup
+## Local Development Setup
 
 ### 1. Clone the Repository
 
@@ -117,20 +149,52 @@ npm install
 - Axios - HTTP client
 - Lucide React - Icons
 
-### 6. Start the Application
+### 6. Configure Environment Variables
 
-#### Option A: Using the Start Script (Recommended)
+Create a `.env.local` file in the root directory to configure your local environment:
+
+```bash
+# Create .env.local
+touch .env.local
+```
+
+Add the following variables to `.env.local`:
+
+```env
+# Backend URL for local development
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# Optional: Google OAuth credentials for local testing
+# If not provided, you can use "Dev Login" (No Auth) in development mode
+GOOGLE_CLIENT_ID=your_client_id
+GOOGLE_CLIENT_SECRET=your_client_secret
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=your_random_secret
+```
+
+> **Note**: In development mode (`npm run dev`), a **"Dev Login"** button will appear on the login page. This allows you to sign in without Google credentials, using your local Application Default Credentials (ADC) for backend access.
+
+### 7. Start the Application (Development Mode)
+
+The recommended way to start the application locally is using the `start.sh` script. This script handles:
+- Checking for required environment variables
+- Managing port conflicts (automatically kills processes on port 8000)
+- Starting both Backend (Python/FastAPI) and Frontend (Next.js) servers
+- Graceful shutdown of both servers
 
 ```bash
 # Make sure you're in the project root
-# The script will use the virtual environment automatically
 chmod +x start.sh
 ./start.sh
 ```
 
-This will start both the backend (port 8000) and frontend (port 3000) servers.
+This will launch:
+- **Frontend**: http://localhost:3000
+- **Backend**: http://localhost:8000 (with hot-reloading)
 
-#### Option B: Manual Start
+#### Alternative: Manual Start
+
+If you prefer to run services separately:
 
 **Terminal 1 - Backend:**
 ```bash
@@ -148,7 +212,7 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 npm run dev
 ```
 
-### 7. Access the Application
+### 8. Access the Application
 
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
@@ -156,7 +220,29 @@ npm run dev
 
 ## Deployment
 
-### App Engine (Standard Environment)
+### Local Production Deployment
+
+To run the application locally in a production-like environment (optimized build):
+
+1. **Build the Frontend**:
+   ```bash
+   npm run build
+   ```
+
+2. **Start the Frontend**:
+   ```bash
+   npm start
+   ```
+
+3. **Start the Backend (Production Mode)**:
+   ```bash
+   source .venv/bin/activate
+   cd backend
+   # Run without --reload for production performance
+   python -m uvicorn main:app --host 0.0.0.0 --port 8000
+   ```
+
+### Cloud Deployment (App Engine)
 
 The application is deployed as **two separate App Engine services** to support different runtimes for the frontend (Node.js 22) and backend (Python 3.11), while maintaining a unified domain.
 

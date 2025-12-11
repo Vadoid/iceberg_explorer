@@ -36,48 +36,27 @@ const mockFolderContents = {
 
 describe('BucketBrowser', () => {
   const mockOnTableSelect = jest.fn()
-  const mockOnBucketChange = jest.fn()
-  const mockOnFolderChange = jest.fn()
+  const mockOnToggleFavorite = jest.fn()
+  const mockFavorites: any[] = []
 
   beforeEach(() => {
     jest.clearAllMocks()
     mockedApi.get.mockResolvedValue({ data: {} })
   })
 
-  it('loads and displays projects on mount', async () => {
-    mockedApi.get.mockResolvedValueOnce({ data: mockProjects })
-
-    render(
-      <BucketBrowser
-        onTableSelect={mockOnTableSelect}
-        onBucketChange={mockOnBucketChange}
-        onFolderChange={mockOnFolderChange}
-      />
-    )
-
-    await waitFor(() => {
-      expect(screen.getByText('Project 1 (project-1)')).toBeInTheDocument()
-    })
-  })
-
-  it('loads buckets when project is selected', async () => {
-    mockedApi.get.mockResolvedValueOnce({ data: mockProjects })
+  it('loads buckets when projectId is provided', async () => {
     mockedApi.get.mockResolvedValueOnce({ data: mockBuckets })
 
     render(
       <BucketBrowser
+        projectId="project-1"
         onTableSelect={mockOnTableSelect}
-        onBucketChange={mockOnBucketChange}
-        onFolderChange={mockOnFolderChange}
+        onToggleFavorite={mockOnToggleFavorite}
+        favorites={mockFavorites}
       />
     )
 
-    // Wait for projects to load
-    await waitFor(() => {
-      expect(screen.getByText('Project 1 (project-1)')).toBeInTheDocument()
-    })
-
-    // Buckets should load automatically for the first project
+    // Buckets should load automatically
     await waitFor(() => {
       expect(screen.getByText('bucket-1')).toBeInTheDocument()
       expect(screen.getByText('bucket-2')).toBeInTheDocument()
@@ -85,15 +64,15 @@ describe('BucketBrowser', () => {
   })
 
   it('loads folder contents when bucket is selected', async () => {
-    mockedApi.get.mockResolvedValueOnce({ data: mockProjects })
     mockedApi.get.mockResolvedValueOnce({ data: mockBuckets })
     mockedApi.get.mockResolvedValueOnce({ data: mockFolderContents })
 
     render(
       <BucketBrowser
+        projectId="project-1"
         onTableSelect={mockOnTableSelect}
-        onBucketChange={mockOnBucketChange}
-        onFolderChange={mockOnFolderChange}
+        onToggleFavorite={mockOnToggleFavorite}
+        favorites={mockFavorites}
       />
     )
 
@@ -113,15 +92,15 @@ describe('BucketBrowser', () => {
   })
 
   it('calls onTableSelect when an Iceberg table is clicked', async () => {
-    mockedApi.get.mockResolvedValueOnce({ data: mockProjects })
     mockedApi.get.mockResolvedValueOnce({ data: mockBuckets })
     mockedApi.get.mockResolvedValueOnce({ data: mockFolderContents })
 
     render(
       <BucketBrowser
+        projectId="project-1"
         onTableSelect={mockOnTableSelect}
-        onBucketChange={mockOnBucketChange}
-        onFolderChange={mockOnFolderChange}
+        onToggleFavorite={mockOnToggleFavorite}
+        favorites={mockFavorites}
       />
     )
 
