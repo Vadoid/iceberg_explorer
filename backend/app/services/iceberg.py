@@ -577,53 +577,97 @@ def analyze_with_pyiceberg_metadata(bucket: str, path: str, project_id: Optional
                         }
                         
                         # Get data files for this manifest (grouped by partition)
+                        # Get data files for this manifest (grouped by partition)
                         try:
                             entries = manifest.fetch_manifest_entry(table.io)
-                            partition_groups = {}
-                            partition_counts = {}
                             
-                            for entry in entries:
-                                data_file = entry.data_file
-                                # Extract partition info
-                                partition_str = "Unpartitioned"
-                                if hasattr(data_file, 'partition') and data_file.partition:
-                                    try:
-                                        # Convert partition record to string representation
-                                        # data_file.partition is a Record.
-                                        partition_str = str(data_file.partition).replace("Record", "").strip("()")
-                                        if not partition_str or partition_str == "()":
-                                            partition_str = "Unpartitioned"
-                                    except Exception:
-                                        partition_str = "Unknown Partition"
+                            # Check if table is partitioned
+                            is_partitioned = len(table.spec().fields) > 0
+                            
+                            if not is_partitioned:
+                                # Unpartitioned table: add files directly to manifest
+                                manifest_data["dataFiles"] = []
+                                file_count = 0
                                 
-                                if partition_str not in partition_groups:
-                                    partition_groups[partition_str] = []
-                                    partition_counts[partition_str] = 0
+                                for entry in entries:
+                                    # Skip deleted files
+                                    if entry.status == 2: # DELETED
+                                        continue
+                                        
+                                    data_file = entry.data_file
+                                    file_count += 1
+                                    
+                                    # Limit to 10 files for unpartitioned tables to avoid clutter
+                                    if len(manifest_data["dataFiles"]) < 10:
+                                        manifest_data["dataFiles"].append({
+                                            "path": data_file.file_path,
+                                            "format": str(data_file.file_format),
+                                            "recordCount": data_file.record_count,
+                                            "fileSizeInBytes": data_file.file_size_in_bytes
+                                        })
                                 
-                                partition_counts[partition_str] += 1
+                                # Add "more" indicator if needed (handled by frontend if dataFiles < file_count?)
+                                # The frontend expects "dataFiles" list. If we want to show "more", we might need a way to indicate total count.
+                                # Current frontend logic for "dataFiles" doesn't seem to show "more" node explicitly for direct dataFiles,
+                                # but we can add a "more" node if we want, or just rely on the user seeing 10 files.
+                                # Actually, let's check frontend: 
+                                # if (m.dataFiles) { m.dataFiles.forEach... }
+                                # It doesn't seem to have "more" logic for direct dataFiles in the code I saw earlier (lines 248-261 of IcebergTree.tsx).
+                                # It just iterates all of them.
+                                # So we should probably limit strictly or add a "more" node manually if we want.
+                                # For now, let's just limit to 10.
                                 
-                                if len(partition_groups[partition_str]) < 5:
-                                    partition_groups[partition_str].append({
-                                        "path": data_file.file_path,
-                                        "format": str(data_file.file_format),
-                                        "recordCount": data_file.record_count,
-                                        "fileSizeInBytes": data_file.file_size_in_bytes
+                            else:
+                                # Partitioned table: group by partition
+                                partition_groups = {}
+                                partition_counts = {}
+                                
+                                for entry in entries:
+                                    # Skip deleted files
+                                    if entry.status == 2: # DELETED
+                                        continue
+
+                                    data_file = entry.data_file
+                                    # Extract partition info
+                                    partition_str = "Unpartitioned"
+                                    if hasattr(data_file, 'partition') and data_file.partition:
+                                        try:
+                                            # Convert partition record to string representation
+                                            # data_file.partition is a Record.
+                                            partition_str = str(data_file.partition).replace("Record", "").strip("()")
+                                            if not partition_str or partition_str == "()":
+                                                partition_str = "Unpartitioned"
+                                        except Exception:
+                                            partition_str = "Unknown Partition"
+                                    
+                                    if partition_str not in partition_groups:
+                                        partition_groups[partition_str] = []
+                                        partition_counts[partition_str] = 0
+                                    
+                                    partition_counts[partition_str] += 1
+                                    
+                                    if len(partition_groups[partition_str]) < 5:
+                                        partition_groups[partition_str].append({
+                                            "path": data_file.file_path,
+                                            "format": str(data_file.file_format),
+                                            "recordCount": data_file.record_count,
+                                            "fileSizeInBytes": data_file.file_size_in_bytes
+                                        })
+                                
+                                # Convert groups to list (limit to 5 partitions)
+                                manifest_data["partitions"] = []
+                                sorted_partitions = sorted(partition_groups.keys())
+                                manifest_data["totalPartitionCount"] = len(sorted_partitions)
+                                
+                                for i, p_name in enumerate(sorted_partitions):
+                                    if i >= 5:
+                                        break
+                                    p_files = partition_groups[p_name]
+                                    manifest_data["partitions"].append({
+                                        "name": p_name,
+                                        "fileCount": partition_counts[p_name],
+                                        "dataFiles": p_files
                                     })
-                            
-                            # Convert groups to list (limit to 5 partitions)
-                            manifest_data["partitions"] = []
-                            sorted_partitions = sorted(partition_groups.keys())
-                            manifest_data["totalPartitionCount"] = len(sorted_partitions)
-                            
-                            for i, p_name in enumerate(sorted_partitions):
-                                if i >= 5:
-                                    break
-                                p_files = partition_groups[p_name]
-                                manifest_data["partitions"].append({
-                                    "name": p_name,
-                                    "fileCount": partition_counts[p_name],
-                                    "dataFiles": p_files
-                                })
                                 
                         except Exception as e:
                             print(f"Error reading manifest entries for {manifest.manifest_path}: {e}")
